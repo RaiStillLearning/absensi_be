@@ -1,0 +1,158 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "SMK Ghama Caraka - Attendance API",
+    "version": "1.0.0",
+    "description": "Backend API for SMK Ghama Caraka School Attendance System (Sistem Absensi Sekolah).\n\nProvides structured RESTful endpoints for attendance tracking, role-based workflows, and reporting.",
+    "contact": {
+      "name": "SMK Ghama Caraka Backend Engineering"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local Development Server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "General",
+      "description": "General system status and health endpoints"
+    },
+    {
+      "name": "Authentication",
+      "description": "Authentication and session management (Future)"
+    },
+    {
+      "name": "Admin",
+      "description": "Administrator operations for master data, users, and school configuration (Future)"
+    },
+    {
+      "name": "Walas",
+      "description": "Wali Kelas (Homeroom Teacher) attendance oversight and reporting (Future)"
+    },
+    {
+      "name": "Guru",
+      "description": "Guru Mata Pelajaran (Subject Teacher) attendance tracking (Future)"
+    },
+    {
+      "name": "Siswa",
+      "description": "Siswa (Student) attendance check-in and records (Future)"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT Bearer token for authorized requests. Enter token without 'Bearer ' prefix."
+      }
+    },
+    "schemas": {},
+    "parameters": {}
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "General"
+        ],
+        "summary": "Service Health Check",
+        "description": "Returns the operational status of the backend application",
+        "responses": {
+          "200": {
+            "description": "Backend service is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Backend is running"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "example": "healthy"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1": {
+      "get": {
+        "tags": [
+          "General"
+        ],
+        "summary": "API v1 Information",
+        "description": "Returns API service name, version, and status metadata",
+        "responses": {
+          "200": {
+            "description": "API version information retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "SMK Ghama Caraka - Attendance API"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "example": "SMK Ghama Caraka - Attendance API"
+                        },
+                        "version": {
+                          "type": "string",
+                          "example": "1.0.0"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "version"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
