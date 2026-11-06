@@ -4,6 +4,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { env } from "./config/env";
 import { errorHandler, notFoundHandler } from "./middlewares/error-handler";
+import { dev_scanner_router } from "./modules/dev/scanner_test_route";
 import { apiV1Router, healthRoute } from "./routes";
 import { API_TAGS, APP_CONSTANTS } from "./shared/constants";
 
@@ -66,6 +67,9 @@ app.openapi(healthRoute, (c) => {
 
 // Modular API v1 Routes
 app.route(APP_CONSTANTS.API_PREFIX, apiV1Router);
+
+// Development Hardware Scanner Test Route (disabled in production)
+app.route("/dev", dev_scanner_router);
 
 // OpenAPI JSON Document
 app.doc(APP_CONSTANTS.OPENAPI_JSON_PATH, {

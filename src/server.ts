@@ -14,6 +14,9 @@ console.log(`📡 Environment: ${env.APP_ENV}`);
 console.log(`🌐 Base URL: http://localhost:${server.port}`);
 console.log(`📚 Swagger UI: http://localhost:${server.port}${APP_CONSTANTS.DOCS_PATH}`);
 console.log(`📄 OpenAPI JSON: http://localhost:${server.port}${APP_CONSTANTS.OPENAPI_JSON_PATH}`);
+if (env.APP_ENV !== "production") {
+  console.log(`🔍 Scanner Test: http://localhost:${server.port}/dev/scanner-test`);
+}
 
 export default server;
 

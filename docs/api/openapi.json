@@ -49,7 +49,81 @@
         "description": "JWT Bearer token for authorized requests. Enter token without 'Bearer ' prefix."
       }
     },
-    "schemas": {},
+    "schemas": {
+      "ScanSuccessResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "message": {
+            "type": "string",
+            "example": "Absensi berhasil"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ScanSuccessData"
+          }
+        },
+        "required": [
+          "success",
+          "message",
+          "data"
+        ]
+      },
+      "ScanSuccessData": {
+        "type": "object",
+        "properties": {
+          "student_name": {
+            "type": "string",
+            "example": "TEST SISWA BARCODE"
+          },
+          "nisn": {
+            "type": "string",
+            "example": "9999999901"
+          },
+          "class_name": {
+            "type": "string",
+            "example": "X PPLG 1"
+          },
+          "attendance_status": {
+            "type": "string",
+            "example": "present"
+          },
+          "check_in_at": {
+            "type": "string",
+            "example": "2026-11-06T20:25:00.000Z"
+          }
+        },
+        "required": [
+          "student_name",
+          "nisn",
+          "class_name",
+          "attendance_status",
+          "check_in_at"
+        ]
+      },
+      "ScanRequest": {
+        "type": "object",
+        "properties": {
+          "barcode_token": {
+            "type": "string",
+            "minLength": 1,
+            "example": "ghama_7c8d9e0f1a2b3c4d5e6f7a8b",
+            "description": "Cryptographically random barcode or QR token"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "550e8400-e29b-41d4-a716-446655440000",
+            "description": "Unique request identifier for idempotency and audit logs"
+          }
+        },
+        "required": [
+          "barcode_token"
+        ]
+      }
+    },
     "parameters": {}
   },
   "paths": {
@@ -146,6 +220,188 @@
                     "success",
                     "message",
                     "data"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/attendance/daily/scan": {
+      "post": {
+        "tags": [
+          "Siswa",
+          "General"
+        ],
+        "summary": "Scan barcode / QR code for daily student attendance",
+        "description": "Validates student barcode token, verifies student enrollment and daily attendance session, and records check-in. Prevents duplicate submissions.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Attendance recorded successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanSuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid session, student status, or validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Barcode token not found or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Duplicate attendance record for this session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
                   ]
                 }
               }

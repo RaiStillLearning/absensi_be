@@ -192,8 +192,10 @@ Server akan aktif di `http://localhost:3000`.
 |---|---|---|
 | `/docs/api` | `GET` | **Interactive Swagger UI** (Dokumentasi lengkap interaktif) |
 | `/docs/api/openapi.json` | `GET` | Raw OpenAPI 3.0 JSON Specification |
+| `/dev/scanner-test` | `GET` | **Hardware Barcode Scanner Test Page** (JR HC-P20, Dev only) |
 | `/health` | `GET` | Health check status server |
 | `/api/v1` | `GET` | API v1 metadata & service identity |
+| `/api/v1/attendance/daily/scan` | `POST` | Scan barcode/QR kehadiran harian siswa |
 
 ### Format Standar JSON Response
 
@@ -250,6 +252,9 @@ bun run db:generate
 # Menjalankan migrasi ke PostgreSQL
 bun run db:migrate
 
+# Seed data dummy untuk pengujian scanner HC-P20
+bun run db:seed
+
 # Membuka GUI Drizzle Studio untuk eksplorasi database
 bun run db:studio
 ```
@@ -263,3 +268,4 @@ Proyek ini dirancang berdasarkan dokumen arsitektur dan spesifikasi resmi:
 * [SRS (Software Requirements Specification)](file:///SRS.md)
 * [SDD (Software Design Document)](file:///SDD.md)
 * [Dokumentasi & Konvensi API](file:///docs/api/conventions.md)
+* [Panduan Pengujian Hardware Scanner HC-P20](file:///docs/hardware_scanner_test.md)

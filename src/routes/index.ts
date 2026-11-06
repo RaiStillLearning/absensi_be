@@ -1,4 +1,5 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
+import { attendance_router } from "../modules/attendance/attendance_route";
 import { API_TAGS, APP_CONSTANTS } from "../shared/constants";
 
 /**
@@ -75,4 +76,7 @@ apiV1Router.openapi(apiV1RootRoute, (c) => {
     200
   );
 });
+
+// Mount Attendance domain routes
+apiV1Router.route("/", attendance_router);
 

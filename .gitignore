@@ -5,6 +5,7 @@ node_modules/
 .env
 .env*.local
 !.env.example
+.dev_scanner_dummy_token.json
 
 # Build & Logs
 dist/
