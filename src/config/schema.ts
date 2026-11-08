@@ -24,6 +24,22 @@ export const students = pgTable("students", {
 });
 
 /**
+ * Users Table
+ * Used for role-based authentication (admin, walas, guru, siswa).
+ * For students, username is their NISN.
+ */
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  username: varchar("username", { length: 50 }).notNull().unique(),
+  password_hash: varchar("password_hash", { length: 255 }).notNull(),
+  role: varchar("role", { length: 20 }).default("siswa").notNull(),
+  student_id: uuid("student_id").references(() => students.id, { onDelete: "cascade" }),
+  is_active: boolean("is_active").default(true).notNull(),
+  created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
  * Class Students Relation Table
  */
 export const class_students = pgTable(

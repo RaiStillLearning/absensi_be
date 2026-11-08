@@ -12,6 +12,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "bun src/scripts/seed_dummy_student.ts",
+    "db:import:students": "bun src/scripts/import_students_csv.ts",
     "db:studio": "drizzle-kit studio",
     "docs:generate": "bun src/scripts/generate-openapi.ts"
   },

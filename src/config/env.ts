@@ -9,6 +9,8 @@ const envSchema = z.object({
   POSTGRES_PASSWORD: z.string().min(1, "POSTGRES_PASSWORD is required"),
   POSTGRES_DB: z.string().min(1, "POSTGRES_DB is required"),
   POSTGRES_PORT: z.coerce.number().int().positive().default(5432),
+  JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 characters").default("ghama_caraka_secure_jwt_secret_key_2026"),
+  STUDENT_DEFAULT_PASSWORD: z.string().min(6).default("Ghama123!"),
 });
 
 export type Env = z.infer<typeof envSchema>;

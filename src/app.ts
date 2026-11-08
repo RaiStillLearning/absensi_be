@@ -31,10 +31,17 @@ export const app = new OpenAPIHono({
 
 // Global Middlewares
 app.use("*", logger());
+
+// Configure CORS for frontend client
+const allowedOrigins = env.CORS_ORIGIN.split(",").map((o) => o.trim());
 app.use(
   "*",
   cors({
-    origin: env.CORS_ORIGIN === "*" ? "*" : [env.CORS_ORIGIN],
+    origin: (origin) => {
+      if (!origin) return allowedOrigins[0] || "http://localhost:5173";
+      if (allowedOrigins.includes(origin)) return origin;
+      return null;
+    },
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
     exposeHeaders: ["Content-Length"],

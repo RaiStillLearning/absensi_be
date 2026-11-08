@@ -7,6 +7,11 @@ node_modules/
 !.env.example
 .dev_scanner_dummy_token.json
 
+# Student Data & Confidential Files
+data/
+*.xlsx
+students_tokens.json
+
 # Build & Logs
 dist/
 .cache/
