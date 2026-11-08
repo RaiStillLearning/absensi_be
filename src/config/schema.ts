@@ -70,6 +70,7 @@ export const student_barcodes = pgTable("student_barcodes", {
   student_id: uuid("student_id")
     .references(() => students.id, { onDelete: "cascade" })
     .notNull(),
+  barcode_value: varchar("barcode_value", { length: 50 }),
   token_hash: varchar("token_hash", { length: 64 }).notNull().unique(),
   format: varchar("format", { length: 20 }).default("QR_CODE").notNull(),
   is_active: boolean("is_active").default(true).notNull(),

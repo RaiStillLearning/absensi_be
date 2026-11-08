@@ -113,6 +113,40 @@ dev_scanner_router.post("/api/reset-dummy-attendance", async (c) => {
 });
 
 /**
+ * List all students with their active barcode IDs (Development/Testing)
+ */
+dev_scanner_router.get("/api/students-barcodes", async (c) => {
+  const result = await db
+    .select({
+      id: students.id,
+      nisn: students.nisn,
+      full_name: students.full_name,
+      class_name: classes.name,
+      barcode_id: student_barcodes.barcode_value,
+      format: student_barcodes.format,
+      is_active: student_barcodes.is_active,
+    })
+    .from(students)
+    .innerJoin(student_barcodes, eq(student_barcodes.student_id, students.id))
+    .leftJoin(
+      class_students,
+      and(
+        eq(class_students.student_id, students.id),
+        eq(class_students.is_active, true)
+      )
+    )
+    .leftJoin(classes, eq(classes.id, class_students.class_id))
+    .where(eq(student_barcodes.is_active, true))
+    .orderBy(student_barcodes.barcode_value);
+
+  return c.json({
+    success: true,
+    total: result.length,
+    data: result,
+  });
+});
+
+/**
  * HTML UI for Hardware Barcode Scanner Test (JR HC-P20)
  */
 dev_scanner_router.get("/scanner-test", (c) => {

@@ -1,5 +1,5 @@
-import { createHash, randomBytes } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { and, eq } from "drizzle-orm";
 import { closeDatabaseConnection, db } from "../config/database";
@@ -143,6 +143,15 @@ export async function importStudentsFromCsv(
   // Track seen NISN in this file to detect within-file duplicates
   const seenNisns = new Set<string>();
 
+  // Collect barcode mapping for printing and reference
+  const exportedBarcodes: Array<{
+    no: number;
+    nisn: string;
+    full_name: string;
+    class_name: string;
+    barcode_id: string;
+  }> = [];
+
   // Process rows starting at line 1 (0 is header)
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i];
@@ -161,10 +170,13 @@ export async function importStudentsFromCsv(
       continue;
     }
 
-    const [, rawNisn, rawNama, rawKelas] = columns;
+    const [rawNo, rawNisn, rawNama, rawKelas] = columns;
     const nisn = (rawNisn || "").trim();
     const fullName = (rawNama || "").trim();
     const className = (rawKelas || "X PPLG 1").trim();
+    const studentNumber = parseInt((rawNo || "").trim(), 10) || i;
+    const barcodeValue = `ABSENSI${String(studentNumber).padStart(3, "0")}`;
+    const tokenHash = createHash("sha256").update(barcodeValue).digest("hex");
 
     // Validation: NISN must be non-empty and numeric string
     if (!nisn || !/^\d{5,20}$/.test(nisn)) {
@@ -271,7 +283,7 @@ export async function importStudentsFromCsv(
         });
       }
 
-      // 4. Ensure Barcode Token exists
+      // 4. Ensure Barcode Token exists (e.g. ABSENSI001, ABSENSI002, ...)
       const existingBarcode = (
         await db
           .select()
@@ -285,17 +297,38 @@ export async function importStudentsFromCsv(
           .limit(1)
       )[0];
 
-      if (!existingBarcode) {
-        const token = `ghama_scan_${randomBytes(16).toString("hex")}`;
-        const tokenHash = createHash("sha256").update(token).digest("hex");
-
+      if (existingBarcode) {
+        if (
+          existingBarcode.barcode_value !== barcodeValue ||
+          existingBarcode.token_hash !== tokenHash
+        ) {
+          await db
+            .update(student_barcodes)
+            .set({
+              barcode_value: barcodeValue,
+              token_hash: tokenHash,
+              format: "CODE_128",
+              updated_at: new Date(),
+            })
+            .where(eq(student_barcodes.id, existingBarcode.id));
+        }
+      } else {
         await db.insert(student_barcodes).values({
           student_id: studentId,
+          barcode_value: barcodeValue,
           token_hash: tokenHash,
-          format: "QR_CODE",
+          format: "CODE_128",
           is_active: true,
         });
       }
+
+      exportedBarcodes.push({
+        no: studentNumber,
+        nisn,
+        full_name: fullName,
+        class_name: className,
+        barcode_id: barcodeValue,
+      });
 
       // 5. Ensure User Account exists for NISN login
       const existingUser = (
@@ -336,6 +369,18 @@ export async function importStudentsFromCsv(
 
   if (summary.errors.length > 0) {
     console.warn("⚠️ Daftar error:", summary.errors);
+  }
+
+  // Export tokens map to students_tokens.json for barcode label printing and reference
+  try {
+    writeFileSync(
+      join(process.cwd(), "students_tokens.json"),
+      JSON.stringify(exportedBarcodes, null, 2),
+      "utf-8"
+    );
+    console.log(`📄 Barcode tokens berhasil diekspor ke: ${join(process.cwd(), "students_tokens.json")}`);
+  } catch (exportErr) {
+    console.warn("⚠️ Gagal mengekspor students_tokens.json:", exportErr);
   }
 
   return summary;
