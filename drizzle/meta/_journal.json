@@ -15,6 +15,13 @@
       "when": 1794135283999,
       "tag": "0001_wide_thing",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794195119082,
+      "tag": "0002_silly_power_pack",
+      "breakpoints": true
     }
   ]
 }

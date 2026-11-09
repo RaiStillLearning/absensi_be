@@ -7,10 +7,12 @@ import { env } from "../config/env";
 import {
   classes,
   class_students,
+  daily_attendances,
   student_barcodes,
   students,
   users,
 } from "../config/schema";
+import { get_jakarta_date_string } from "../modules/attendance/attendance_service";
 
 // Known gender lookup table for SMK Ghama Caraka data
 const KNOWN_GENDERS: Record<string, "L" | "P"> = {
@@ -174,7 +176,8 @@ export async function importStudentsFromCsv(
     const nisn = (rawNisn || "").trim();
     const fullName = (rawNama || "").trim();
     const className = (rawKelas || "X PPLG 1").trim();
-    const studentNumber = parseInt((rawNo || "").trim(), 10) || i;
+    // Use sequential row index i so each student across all classes gets a globally unique barcode ID (ABSENSI001 ... ABSENSI041)
+    const studentNumber = i;
     const barcodeValue = `ABSENSI${String(studentNumber).padStart(3, "0")}`;
     const tokenHash = createHash("sha256").update(barcodeValue).digest("hex");
 
@@ -232,6 +235,33 @@ export async function importStudentsFromCsv(
           targetClass = created;
         }
         classCache.set(className, targetClass);
+
+        // Ensure Active Daily Attendance Session for Today
+        const todayJakarta = get_jakarta_date_string();
+        const existingSession = (
+          await db
+            .select()
+            .from(daily_attendances)
+            .where(
+              and(
+                eq(daily_attendances.class_id, targetClass.id),
+                eq(daily_attendances.attendance_date, todayJakarta)
+              )
+            )
+            .limit(1)
+        )[0];
+
+        if (!existingSession) {
+          const sessionStart = new Date(`${todayJakarta}T00:00:00+07:00`);
+          const sessionEnd = new Date(`${todayJakarta}T23:59:59+07:00`);
+          await db.insert(daily_attendances).values({
+            class_id: targetClass.id,
+            attendance_date: todayJakarta,
+            start_time: sessionStart,
+            end_time: sessionEnd,
+            status: "active",
+          });
+        }
       }
 
       // 2. Ensure Student exists (Idempotent: find by NISN)
