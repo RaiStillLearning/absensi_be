@@ -23,27 +23,35 @@ import * as schema from "./schema";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PG_DATA_DIR = join(__dirname, "../../pgdata");
 
-const useExternalPg = process.env.USE_EXTERNAL_POSTGRES === "true";
+const useExternalPg = env.USE_EXTERNAL_POSTGRES;
 
-export const pgliteClient = useExternalPg ? null : new PGlite(PG_DATA_DIR);
+export let pgliteClient: PGlite | null = useExternalPg ? null : new PGlite(PG_DATA_DIR);
 
-export const queryClient = useExternalPg
+export let queryClient: ReturnType<typeof postgres> | null = useExternalPg
   ? postgres(env.DATABASE_URL, {
       max: env.APP_ENV === "production" ? 20 : 5,
       idle_timeout: 20,
-      connect_timeout: 10,
+      connect_timeout: 2,
       onnotice: () => {},
     })
   : null;
 
-/**
- * Drizzle ORM database instance initialized with PostgreSQL schema
- */
-export const db: ReturnType<typeof drizzlePostgres<typeof schema>> = useExternalPg
+type DrizzleDb = ReturnType<typeof drizzlePostgres<typeof schema>>;
+
+let activeDb: DrizzleDb = useExternalPg
   ? drizzlePostgres(queryClient!, { schema })
-  : (drizzlePglite(pgliteClient!, { schema }) as unknown as ReturnType<
-      typeof drizzlePostgres<typeof schema>
-    >);
+  : (drizzlePglite(pgliteClient!, { schema }) as unknown as DrizzleDb);
+
+/**
+ * Drizzle ORM database instance initialized with PostgreSQL schema.
+ * Automatically delegates to Docker PostgreSQL when reachable, or PGlite fallback.
+ */
+export const db: DrizzleDb = new Proxy({} as DrizzleDb, {
+  get(_target, prop, receiver) {
+    const value = Reflect.get(activeDb as object, prop, receiver);
+    return typeof value === "function" ? value.bind(activeDb) : value;
+  },
+});
 
 let initPromise: Promise<void> | null = null;
 
@@ -206,10 +214,26 @@ CREATE TABLE IF NOT EXISTS "activity_logs" (
 `;
 
 async function runDdlAndSeed(): Promise<void> {
-  if (pgliteClient) {
+  if (queryClient) {
+    try {
+      await queryClient.unsafe(DDL_SQL);
+      console.log("🐘 Terhubung ke External PostgreSQL (Docker PG).");
+    } catch {
+      console.warn(
+        "⚠️ Docker PostgreSQL (localhost:5432) belum aktif — beralih otomatis ke Embedded PostgreSQL (PGlite) di ./pgdata"
+      );
+      try {
+        await queryClient.end({ timeout: 1 });
+      } catch {
+        // ignore close error
+      }
+      queryClient = null;
+      pgliteClient = new PGlite(PG_DATA_DIR);
+      activeDb = drizzlePglite(pgliteClient, { schema }) as unknown as DrizzleDb;
+      await pgliteClient.exec(DDL_SQL);
+    }
+  } else if (pgliteClient) {
     await pgliteClient.exec(DDL_SQL);
-  } else if (queryClient) {
-    await queryClient.unsafe(DDL_SQL);
   }
 
   // 1. Seed Classes if empty

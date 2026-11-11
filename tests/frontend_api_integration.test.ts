@@ -5,7 +5,7 @@ async function runTests() {
   let passed = 0;
   let failed = 0;
 
-  async function testEndpoint(name: string, path: string, init?: RequestInit, expectedStatus = 200) {
+  async function testEndpoint(name: string, path: string, init?: RequestInit, expectedStatus = 200): Promise<any> {
     try {
       const res = await app.request(path, init);
       if (res.status === expectedStatus) {
@@ -37,21 +37,21 @@ async function runTests() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ nisn_atau_username: "admin", kata_sandi: "admin123" }),
   });
-  const adminHeaders = adminLogin?.access_token ? { Authorization: `Bearer ${adminLogin.access_token}` } : {};
+  const adminHeaders: Record<string, string> = adminLogin?.access_token ? { Authorization: `Bearer ${adminLogin.access_token}` } : {};
 
   const guruLogin = await testEndpoint("Guru Login", "/api/v1/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ nisn_atau_username: "198905122015012008", kata_sandi: "guru123" }),
   });
-  const guruHeaders = guruLogin?.access_token ? { Authorization: `Bearer ${guruLogin.access_token}` } : {};
+  const guruHeaders: Record<string, string> = guruLogin?.access_token ? { Authorization: `Bearer ${guruLogin.access_token}` } : {};
 
   const siswaLogin = await testEndpoint("Siswa Login", "/api/v1/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ nisn_atau_username: "0102641001", kata_sandi: "siswa123" }),
   });
-  const siswaHeaders = siswaLogin?.access_token ? { Authorization: `Bearer ${siswaLogin.access_token}` } : {};
+  const siswaHeaders: Record<string, string> = siswaLogin?.access_token ? { Authorization: `Bearer ${siswaLogin.access_token}` } : {};
 
   // 3. Dashboard Endpoints
   await testEndpoint("Dashboard Stats", "/api/v1/dashboard/stats", { headers: adminHeaders });

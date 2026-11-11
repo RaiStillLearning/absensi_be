@@ -11,6 +11,10 @@ if (typeof process.loadEnvFile === "function") {
 const envSchema = z.object({
   APP_PORT: z.coerce.number().int().positive().default(3000),
   APP_ENV: z.enum(["development", "test", "production"]).default("development"),
+  USE_EXTERNAL_POSTGRES: z
+    .string()
+    .default("true")
+    .transform((v) => v === "true" || v === "1"),
   DATABASE_URL: z.string().default("postgresql://absensi_user:change_me@localhost:5432/absensi_db"),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
   POSTGRES_USER: z.string().default("absensi_user"),
