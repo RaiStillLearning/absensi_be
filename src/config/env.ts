@@ -8,22 +8,36 @@ if (typeof process.loadEnvFile === "function") {
   }
 }
 
-const envSchema = z.object({
-  APP_PORT: z.coerce.number().int().positive().default(3000),
-  APP_ENV: z.enum(["development", "test", "production"]).default("development"),
-  USE_EXTERNAL_POSTGRES: z
-    .string()
-    .default("true")
-    .transform((v) => v === "true" || v === "1"),
-  DATABASE_URL: z.string().default("postgresql://absensi_user:change_me@localhost:5432/absensi_db"),
-  CORS_ORIGIN: z.string().default("http://localhost:5173"),
-  POSTGRES_USER: z.string().default("absensi_user"),
-  POSTGRES_PASSWORD: z.string().default("change_me"),
-  POSTGRES_DB: z.string().default("absensi_db"),
-  POSTGRES_PORT: z.coerce.number().int().positive().default(5432),
-  JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 characters").default("ghama_caraka_secure_jwt_secret_key_2026"),
-  STUDENT_DEFAULT_PASSWORD: z.string().min(6).default("Ghama123!"),
-});
+const envSchema = z
+  .object({
+    APP_PORT: z.coerce.number().int().positive().default(3000),
+    APP_ENV: z.enum(["development", "test", "production"]).default("development"),
+    USE_EXTERNAL_POSTGRES: z
+      .string()
+      .default("true")
+      .transform((v) => v === "true" || v === "1"),
+
+    // ← WAJIB DIISI, TIDAK ADA DEFAULT
+    DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+    JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 characters"),
+    STUDENT_DEFAULT_PASSWORD: z.string().min(6, "STUDENT_DEFAULT_PASSWORD is required"),
+    POSTGRES_PASSWORD: z.string().min(1, "POSTGRES_PASSWORD is required"),
+
+    // ← Boleh punya default (non-sensitif)
+    CORS_ORIGIN: z.string().default("http://localhost:5173"),
+    POSTGRES_USER: z.string().default("absensi_user"),
+    POSTGRES_DB: z.string().default("absensi_db"),
+    POSTGRES_PORT: z.coerce.number().int().positive().default(5432),
+  })
+  .superRefine((data, ctx) => {
+    if (data.APP_ENV === "production" && data.JWT_SECRET.length < 32) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["JWT_SECRET"],
+        message: "JWT_SECRET must be at least 32 characters in production",
+      });
+    }
+  });
 
 export type Env = z.infer<typeof envSchema>;
 
@@ -35,8 +49,11 @@ function loadEnv(): Env {
       .map((issue) => ` - ${issue.path.join(".")}: ${issue.message}`)
       .join("\n");
 
-    console.error("❌ Environment validation error:\n" + errorDetails);
-    throw new Error("Invalid application environment configuration. Please check your .env file.");
+    console.error(
+      "❌ Environment validation error (missing or invalid required variables in .env):\n" +
+        errorDetails
+    );
+    process.exit(1);
   }
 
   return result.data;

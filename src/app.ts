@@ -40,12 +40,17 @@ app.use("*", async (_c, next) => {
 });
 
 // Configure CORS for frontend client
-const allowedOrigins = env.CORS_ORIGIN.split(",").map((o) => o.trim());
+const allowedOrigins = env.CORS_ORIGIN.split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
 app.use(
   "*",
   cors({
     origin: (origin) => {
-      if (!origin) return allowedOrigins[0] || "http://localhost:5173";
+      if (!origin) {
+        if (env.APP_ENV === "production") return null;
+        return allowedOrigins[0] ?? null;
+      }
       if (allowedOrigins.includes(origin)) return origin;
       return null;
     },
