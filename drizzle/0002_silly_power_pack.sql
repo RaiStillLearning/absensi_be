@@ -1,1 +1,0 @@
-ALTER TABLE "student_barcodes" ADD COLUMN "barcode_value" varchar(50);

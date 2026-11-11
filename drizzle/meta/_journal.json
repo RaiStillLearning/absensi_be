@@ -5,22 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1793971009606,
-      "tag": "0000_overrated_radioactive_man",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1794135283999,
-      "tag": "0001_wide_thing",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1794195119082,
-      "tag": "0002_silly_power_pack",
+      "when": 1794409601161,
+      "tag": "0000_dear_karnak",
       "breakpoints": true
     }
   ]

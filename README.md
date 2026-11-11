@@ -252,12 +252,42 @@ bun run db:generate
 # Menjalankan migrasi ke PostgreSQL
 bun run db:migrate
 
+# Memverifikasi konsistensi snapshot migrasi Drizzle
+bun run db:check
+
 # Seed data dummy untuk pengujian scanner HC-P20
 bun run db:seed
 
 # Membuka GUI Drizzle Studio untuk eksplorasi database
 bun run db:studio
 ```
+
+---
+
+## 🔄 Workflow Migrasi Database Tim (Drizzle ORM)
+
+Agar skema database seluruh anggota tim selalu identik setiap kali melakukan `git pull`, ikuti aturan berikut:
+
+1. **Setelah `git pull`:**
+   - Cukup jalankan `bun run db:migrate` atau langsung `bun run dev`.
+   - Drizzle secara otomatis memeriksa tabel tracking `__drizzle_migrations` dan hanya menerapkan file migrasi baru yang belum dijalankan pada database lokal masing-masing (baik Docker PostgreSQL maupun fallback PGlite).
+
+2. **Khusus Migrasi Pertama Kali dari Versi `DDL_SQL` Lama:**
+   - Jika database lokal Anda sebelumnya dibuat menggunakan `DDL_SQL` manual (sehingga tabel sudah ada tetapi belum memiliki tabel tracking `__drizzle_migrations`), lakukan reset volume database lokal **satu kali saja**:
+     ```bash
+     # Reset container & volume Docker PostgreSQL
+     docker compose down -v && docker compose up -d
+
+     # Hapus folder PGlite lokal (jika ada)
+     rm -rf pgdata
+     ```
+   - Setelah itu jalankan `bun run dev` atau `bun run db:migrate`.
+
+3. **Saat Mengubah `src/config/schema.ts`:**
+   - Wajib jalankan `bun run db:generate` untuk menghasilkan file migrasi SQL baru di folder `drizzle/`.
+   - Verifikasi konsistensi migrasi dengan `bun run db:check` dan periksa isi file SQL yang ter-generate.
+   - Commit perubahan `src/config/schema.ts` **berserta seluruh isi folder `drizzle/`** (`drizzle/*.sql` dan `drizzle/meta/*`) secara bersamaan.
+   - **Dilarang** mengubah struktur tabel secara manual langsung di database lokal atau memakai `drizzle-kit push` tanpa men-generate file migrasi.
 
 ---
 

@@ -4,7 +4,9 @@ import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { count, eq } from "drizzle-orm";
 import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
+import { migrate as migratePglite } from "drizzle-orm/pglite/migrator";
 import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
+import { migrate as migratePostgres } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import {
   initialAdminProfile,
@@ -22,6 +24,7 @@ import * as schema from "./schema";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PG_DATA_DIR = join(__dirname, "../../pgdata");
+const MIGRATIONS_FOLDER = join(__dirname, "../../drizzle");
 
 const useExternalPg = env.USE_EXTERNAL_POSTGRES;
 
@@ -55,169 +58,12 @@ export const db: DrizzleDb = new Proxy({} as DrizzleDb, {
 
 let initPromise: Promise<void> | null = null;
 
-const DDL_SQL = `
-CREATE TABLE IF NOT EXISTS "classes" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  "class_code_id" integer,
-  "name" varchar(50) NOT NULL UNIQUE,
-  "tingkat" varchar(10) DEFAULT 'X' NOT NULL,
-  "jurusan" varchar(50) DEFAULT 'RPL' NOT NULL,
-  "wali_kelas" varchar(150) DEFAULT '' NOT NULL,
-  "tahun_ajaran" varchar(20) DEFAULT '2026/2027' NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS "teachers" (
-  "id" serial PRIMARY KEY,
-  "nip" varchar(30) DEFAULT '',
-  "nama_guru" varchar(150) NOT NULL,
-  "nama_panggilan" varchar(50) DEFAULT '',
-  "mata_pelajaran" varchar(100) NOT NULL,
-  "email" varchar(150) DEFAULT '',
-  "nomor_telepon" varchar(30) DEFAULT '',
-  "jenis_kelamin" varchar(20) DEFAULT 'Perempuan' NOT NULL,
-  "tempat_lahir" varchar(100) DEFAULT 'Jakarta' NOT NULL,
-  "tanggal_lahir" varchar(50) DEFAULT '12 Mei 1989' NOT NULL,
-  "alamat" varchar(255) DEFAULT 'Depok, Jawa Barat' NOT NULL,
-  "is_walas" boolean DEFAULT false NOT NULL,
-  "kelas_walas" varchar(50) DEFAULT '' NOT NULL,
-  "foto_profil" text DEFAULT '',
-  "status_akun" varchar(20) DEFAULT 'Aktif' NOT NULL,
-  "tahun_ajaran" varchar(20) DEFAULT '2026/2027' NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS "schedules" (
-  "id" serial PRIMARY KEY,
-  "kelas" varchar(50) NOT NULL,
-  "hari" varchar(20) NOT NULL,
-  "jam_ke" integer NOT NULL,
-  "waktu_mulai" varchar(10) NOT NULL,
-  "waktu_selesai" varchar(10) NOT NULL,
-  "mata_pelajaran" varchar(100) NOT NULL,
-  "guru" varchar(150) NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS "students" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  "nisn" varchar(20) NOT NULL UNIQUE,
-  "nis" varchar(20) DEFAULT '242510001' NOT NULL,
-  "full_name" varchar(150) NOT NULL,
-  "gender" varchar(10) NOT NULL,
-  "kelas" varchar(50) DEFAULT 'X RPL 1' NOT NULL,
-  "jurusan" varchar(100) DEFAULT 'Rekayasa Perangkat Lunak' NOT NULL,
-  "tempat_lahir" varchar(100) DEFAULT 'Depok' NOT NULL,
-  "tanggal_lahir" varchar(50) DEFAULT '14 Maret 2008' NOT NULL,
-  "agama" varchar(30) DEFAULT 'Islam' NOT NULL,
-  "alamat" varchar(255) DEFAULT 'Jl. H. Caraka No. 12, Cisalak, Depok' NOT NULL,
-  "telepon" varchar(30) DEFAULT '0812-9876-5432' NOT NULL,
-  "nama_wali" varchar(150) DEFAULT 'Bambang Pratama' NOT NULL,
-  "telepon_wali" varchar(30) DEFAULT '0813-1122-3344' NOT NULL,
-  "email" varchar(150) DEFAULT 'siswa@ghamacaraka.sch.id' NOT NULL,
-  "foto_profil" text DEFAULT '',
-  "status" varchar(20) DEFAULT 'active' NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS "users" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  "username" varchar(50) NOT NULL UNIQUE,
-  "password_hash" varchar(255) NOT NULL,
-  "role" varchar(20) DEFAULT 'siswa' NOT NULL,
-  "nama_lengkap" varchar(150) DEFAULT '',
-  "email" varchar(150) DEFAULT '',
-  "foto_profil" text DEFAULT '',
-  "student_id" uuid REFERENCES "students"("id") ON DELETE CASCADE,
-  "teacher_id" integer,
-  "is_active" boolean DEFAULT true NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS "class_students" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  "class_id" uuid NOT NULL REFERENCES "classes"("id") ON DELETE CASCADE,
-  "student_id" uuid NOT NULL REFERENCES "students"("id") ON DELETE CASCADE,
-  "is_active" boolean DEFAULT true NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
-CREATE UNIQUE INDEX IF NOT EXISTS "class_students_class_student_idx" ON "class_students" ("class_id", "student_id");
-
-CREATE TABLE IF NOT EXISTS "student_barcodes" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  "student_id" uuid NOT NULL REFERENCES "students"("id") ON DELETE CASCADE,
-  "barcode_value" varchar(50),
-  "token_hash" varchar(64) NOT NULL UNIQUE,
-  "format" varchar(20) DEFAULT 'QR_CODE' NOT NULL,
-  "is_active" boolean DEFAULT true NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS "daily_attendances" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  "class_id" uuid NOT NULL REFERENCES "classes"("id") ON DELETE CASCADE,
-  "attendance_date" date NOT NULL,
-  "start_time" timestamp with time zone,
-  "end_time" timestamp with time zone,
-  "status" varchar(20) DEFAULT 'active' NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
-CREATE UNIQUE INDEX IF NOT EXISTS "daily_attendances_class_date_idx" ON "daily_attendances" ("class_id", "attendance_date");
-
-CREATE TABLE IF NOT EXISTS "daily_attendance_records" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  "daily_attendance_id" uuid NOT NULL REFERENCES "daily_attendances"("id") ON DELETE CASCADE,
-  "student_id" uuid NOT NULL REFERENCES "students"("id") ON DELETE CASCADE,
-  "record_code" varchar(50) DEFAULT '',
-  "attendance_status" varchar(20) DEFAULT 'present' NOT NULL,
-  "attendance_source" varchar(20) DEFAULT 'barcode' NOT NULL,
-  "jam_masuk" varchar(20) DEFAULT '06:45',
-  "keterangan" varchar(255) DEFAULT 'Tepat waktu',
-  "check_in_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "request_id" uuid,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
-CREATE UNIQUE INDEX IF NOT EXISTS "daily_attendance_records_session_student_idx" ON "daily_attendance_records" ("daily_attendance_id", "student_id");
-
-CREATE TABLE IF NOT EXISTS "subject_attendance_records" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  "record_key" varchar(50) NOT NULL,
-  "kelas" varchar(50) NOT NULL,
-  "mata_pelajaran" varchar(100) NOT NULL,
-  "tanggal" varchar(20) NOT NULL,
-  "no_urut" integer DEFAULT 1 NOT NULL,
-  "nisn" varchar(20) NOT NULL,
-  "nama_siswa" varchar(150) NOT NULL,
-  "status" varchar(20) DEFAULT 'Hadir' NOT NULL,
-  "catatan" varchar(255) DEFAULT '',
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS "activity_logs" (
-  "id" serial PRIMARY KEY,
-  "jenis" varchar(30) NOT NULL,
-  "judul" varchar(150) NOT NULL,
-  "deskripsi" varchar(255) NOT NULL,
-  "waktu" varchar(50) NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL
-);
-`;
-
-async function runDdlAndSeed(): Promise<void> {
+async function runMigrationsAndSeed(): Promise<void> {
   if (queryClient) {
+    let isConnected = false;
     try {
-      await queryClient.unsafe(DDL_SQL);
-      console.log("🐘 Terhubung ke External PostgreSQL (Docker PG).");
+      await queryClient`SELECT 1`;
+      isConnected = true;
     } catch {
       console.warn(
         "⚠️ Docker PostgreSQL (localhost:5432) belum aktif — beralih otomatis ke Embedded PostgreSQL (PGlite) di ./pgdata"
@@ -229,11 +75,27 @@ async function runDdlAndSeed(): Promise<void> {
       }
       queryClient = null;
       pgliteClient = new PGlite(PG_DATA_DIR);
-      activeDb = drizzlePglite(pgliteClient, { schema }) as unknown as DrizzleDb;
-      await pgliteClient.exec(DDL_SQL);
+      const pgliteDb = drizzlePglite(pgliteClient, { schema });
+      activeDb = pgliteDb as unknown as DrizzleDb;
+      await migratePglite(pgliteDb, { migrationsFolder: MIGRATIONS_FOLDER });
+    }
+
+    if (isConnected) {
+      console.log("🐘 Terhubung ke External PostgreSQL (Docker PG). Menjalankan migrasi Drizzle...");
+      try {
+        await migratePostgres(activeDb, { migrationsFolder: MIGRATIONS_FOLDER });
+      } catch (migrationErr) {
+        console.error(
+          "❌ Gagal menjalankan migrasi Drizzle pada External PostgreSQL:",
+          migrationErr
+        );
+        throw migrationErr;
+      }
     }
   } else if (pgliteClient) {
-    await pgliteClient.exec(DDL_SQL);
+    const pgliteDb = drizzlePglite(pgliteClient, { schema });
+    activeDb = pgliteDb as unknown as DrizzleDb;
+    await migratePglite(pgliteDb, { migrationsFolder: MIGRATIONS_FOLDER });
   }
 
   // 1. Seed Classes if empty
@@ -650,7 +512,7 @@ async function runDdlAndSeed(): Promise<void> {
 
 export async function ensureDatabaseInitialized(): Promise<void> {
   if (!initPromise) {
-    initPromise = runDdlAndSeed().catch((err) => {
+    initPromise = runMigrationsAndSeed().catch((err) => {
       initPromise = null;
       console.error("Failed to initialize PostgreSQL database:", err);
       throw err;
