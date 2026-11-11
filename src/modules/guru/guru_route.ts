@@ -1,5 +1,5 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-import { and, asc, eq, or } from "drizzle-orm";
+import { and, asc, count, eq, or } from "drizzle-orm";
 import type { Context } from "hono";
 import { db } from "../../config/database";
 import { env } from "../../config/env";
@@ -11,7 +11,7 @@ import {
   teachers,
   users,
 } from "../../config/schema";
-import { getAuthUser } from "../../middlewares/auth";
+import { type DecodedAuthToken } from "../../middlewares/auth";
 import { API_TAGS } from "../../shared/constants";
 import { ErrorResponseSchema } from "../../shared/types/api";
 import { hashPassword } from "../../shared/utils/hash";
@@ -100,57 +100,63 @@ function mapTeacherToGuruItem(t: typeof teachers.$inferSelect) {
   };
 }
 
-async function getActiveTeacherProfileRow(c?: Context) {
-  const authUser = c ? getAuthUser(c) : null;
-  if (authUser) {
-    const teacherId = Number(authUser.sub);
-    if (!Number.isNaN(teacherId) && teacherId > 0) {
-      const [byId] = await db.select().from(teachers).where(eq(teachers.id, teacherId)).limit(1);
-      if (byId) return byId;
-    }
-    if (authUser.username) {
-      const [byNipOrEmail] = await db
-        .select()
-        .from(teachers)
-        .where(
-          or(eq(teachers.nip, authUser.username), eq(teachers.email, authUser.username))
-        )
-        .limit(1);
-      if (byNipOrEmail) return byNipOrEmail;
-    }
+async function getTeacherFromContext(
+  c: Context
+): Promise<typeof teachers.$inferSelect | undefined> {
+  const authUser = c.get("authUser") as DecodedAuthToken | undefined;
+  const teacherId = Number(authUser?.sub);
+  if (teacherId && !Number.isNaN(teacherId)) {
+    const [teacher] = await db
+      .select()
+      .from(teachers)
+      .where(eq(teachers.id, teacherId))
+      .limit(1);
+    return teacher;
   }
-  const [rina] = await db.select().from(teachers).where(eq(teachers.id, 5)).limit(1);
-  if (rina) return rina;
-  const [first] = await db.select().from(teachers).orderBy(asc(teachers.id)).limit(1);
-  return first;
+  if (authUser?.username) {
+    const [byNip] = await db
+      .select()
+      .from(teachers)
+      .where(or(eq(teachers.nip, authUser.username), eq(teachers.email, authUser.username)))
+      .limit(1);
+    if (byNip) return byNip;
+  }
+  if (authUser?.role === "admin") {
+    const [first] = await db.select().from(teachers).orderBy(asc(teachers.id)).limit(1);
+    return first;
+  }
+  return undefined;
 }
 
 async function formatTeacherProfile(t?: typeof teachers.$inferSelect) {
   const isWalas = Boolean(t?.is_walas ?? false);
   const kelasWalas = t?.kelas_walas ?? "";
   const namaGuru = t?.nama_guru || "";
+  const mapel = t?.mata_pelajaran || "";
 
   let kelasDiajar: string[] = [];
-  if (namaGuru) {
+  if (mapel) {
+    const fromRecords = await db
+      .selectDistinct({ kelas: subject_attendance_records.kelas })
+      .from(subject_attendance_records)
+      .where(eq(subject_attendance_records.mata_pelajaran, mapel));
+    kelasDiajar = fromRecords.map((k) => k.kelas).filter(Boolean);
+  }
+  if (kelasDiajar.length === 0 && namaGuru) {
     const teacherSchedules = await db
-      .select({ kelas: schedules.kelas })
+      .selectDistinct({ kelas: schedules.kelas })
       .from(schedules)
       .where(eq(schedules.guru, namaGuru));
-    kelasDiajar = Array.from(new Set(teacherSchedules.map((s) => s.kelas).filter(Boolean)));
+    kelasDiajar = teacherSchedules.map((s) => s.kelas).filter(Boolean);
   }
   if (kelasDiajar.length === 0 && kelasWalas) {
     kelasDiajar = [kelasWalas];
   }
 
-  let jumlahSiswa = 0;
-  const targetClass = kelasWalas || kelasDiajar[0] || "";
-  if (targetClass) {
-    const classStudents = await db
-      .select({ id: students.id })
-      .from(students)
-      .where(eq(students.kelas, targetClass));
-    jumlahSiswa = classStudents.length;
-  }
+  const [jumlahSiswa] = await db
+    .select({ count: count() })
+    .from(students)
+    .where(eq(students.kelas, kelasWalas || kelasDiajar[0] || ""));
 
   return {
     id: String(t?.id ?? ""),
@@ -166,12 +172,12 @@ async function formatTeacherProfile(t?: typeof teachers.$inferSelect) {
     tempat_lahir: t?.tempat_lahir || "",
     tanggal_lahir: t?.tanggal_lahir || "",
     alamat: t?.alamat || "",
-    mata_pelajaran: t?.mata_pelajaran || "",
+    mata_pelajaran: mapel,
     kelas_diajar: kelasDiajar,
     isWalas,
     kelasWalas,
     kelas_diampu: kelasWalas,
-    jumlah_siswa: jumlahSiswa,
+    jumlah_siswa: jumlahSiswa?.count || 0,
     status_akun: ((t?.status_akun === "Non-Aktif" ? "Non-Aktif" : "Aktif") as
       | "Aktif"
       | "Non-Aktif"),
@@ -386,7 +392,7 @@ export const getGuruProfileRoute = createRoute({
 });
 
 guruRouter.openapi(getGuruProfileRoute, async (c) => {
-  const row = await getActiveTeacherProfileRow(c);
+  const row = await getTeacherFromContext(c);
   return c.json(await formatTeacherProfile(row), 200);
 });
 
@@ -422,7 +428,7 @@ export const updateGuruProfileRoute = createRoute({
 
 guruRouter.openapi(updateGuruProfileRoute, async (c) => {
   const body = c.req.valid("json");
-  const current = await getActiveTeacherProfileRow(c);
+  const current = await getTeacherFromContext(c);
   if (!current) {
     return c.json(await formatTeacherProfile(undefined), 200);
   }
@@ -488,26 +494,22 @@ export const getGuruDashboardRoute = createRoute({
 });
 
 guruRouter.openapi(getGuruDashboardRoute, async (c) => {
-  const row = await getActiveTeacherProfileRow(c);
+  const row = await getTeacherFromContext(c);
   const profile = await formatTeacherProfile(row);
   const activeClass = profile.kelasWalas || profile.kelas_diajar[0] || "X RPL 1";
+  const today = new Date().toISOString().split("T")[0] || "2026-11-11";
+  const todayFormatted = new Date().toLocaleDateString("id-ID");
   const sessionList = await getOrSeedSubjectSession(
     activeClass,
     profile.mata_pelajaran,
-    "2026-06-06"
+    today
   );
 
   const hadir = sessionList.filter((s) => s.status === "Hadir").length;
   const izin = sessionList.filter((s) => s.status === "Izin").length;
   const sakit = sessionList.filter((s) => s.status === "Sakit").length;
   const alpa = sessionList.filter((s) => s.status === "Alpa").length;
-  const now = new Date();
-  const tanggalSekarang = now.toLocaleDateString("id-ID", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-  const jamSekarang = now.toLocaleTimeString("id-ID", {
+  const jamSekarang = new Date().toLocaleTimeString("id-ID", {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -522,7 +524,7 @@ guruRouter.openapi(getGuruDashboardRoute, async (c) => {
           ? "Teknik Komputer dan Jaringan"
           : "Rekayasa Perangkat Lunak",
         mata_pelajaran: profile.mata_pelajaran,
-        tanggal: tanggalSekarang,
+        tanggal: todayFormatted,
         jam: jamSekarang,
         status: "Aktif",
       },
@@ -567,7 +569,10 @@ export const getGuruAbsensiSesiRoute = createRoute({
 
 guruRouter.openapi(getGuruAbsensiSesiRoute, async (c) => {
   const { kelas, mapel, tanggal } = c.req.valid("query");
-  const list = await getOrSeedSubjectSession(kelas, mapel, tanggal);
+  const teacher = await getTeacherFromContext(c);
+  const targetKelas = kelas || teacher?.kelas_walas || "X RPL 1";
+  const targetMapel = mapel || teacher?.mata_pelajaran || "Pemrograman Web";
+  const list = await getOrSeedSubjectSession(targetKelas, targetMapel, tanggal);
   return c.json(list, 200);
 });
 
@@ -613,8 +618,9 @@ export const saveGuruAbsensiSesiRoute = createRoute({
 
 guruRouter.openapi(saveGuruAbsensiSesiRoute, async (c) => {
   const body = c.req.valid("json");
-  const normKelas = (body.kelas || "X RPL 1").trim();
-  const normMapel = (body.mapel || "Pemrograman Web").trim();
+  const teacher = await getTeacherFromContext(c);
+  const normKelas = (body.kelas || teacher?.kelas_walas || "X RPL 1").trim();
+  const normMapel = (body.mapel || teacher?.mata_pelajaran || "Pemrograman Web").trim();
   const normTanggal = normalizeDateString(body.tanggal);
   const rawList = body.siswa || body.siswa_list || [];
 

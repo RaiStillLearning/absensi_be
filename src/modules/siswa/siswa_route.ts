@@ -8,8 +8,9 @@ import {
   students,
   subject_attendance_records,
 } from "../../config/schema";
-import { getAuthUser } from "../../middlewares/auth";
+import { type DecodedAuthToken } from "../../middlewares/auth";
 import { API_TAGS } from "../../shared/constants";
+import { ErrorResponseSchema } from "../../shared/types/api";
 
 export const siswaRouter = new OpenAPIHono();
 
@@ -34,33 +35,34 @@ export const SiswaProfileSchema = z
   })
   .openapi("SiswaProfile");
 
-async function getActiveStudentRow(c?: Context) {
-  const authUser = c ? getAuthUser(c) : null;
-  if (authUser) {
-    const identifier = authUser.sub || authUser.username;
-    if (identifier) {
-      const [byNisnOrEmail] = await db
-        .select()
-        .from(students)
-        .where(
-          or(
-            eq(students.nisn, identifier),
-            eq(students.nisn, authUser.username),
-            eq(students.email, authUser.username)
-          )
-        )
-        .limit(1);
-      if (byNisnOrEmail) return byNisnOrEmail;
-    }
+async function getStudentFromContext(
+  c: Context
+): Promise<typeof students.$inferSelect | undefined> {
+  const authUser = c.get("authUser") as DecodedAuthToken | undefined;
+  const nisn = authUser?.sub;
+  if (nisn) {
+    const [student] = await db
+      .select()
+      .from(students)
+      .where(eq(students.nisn, nisn))
+      .limit(1);
+    if (student) return student;
   }
-  const [main] = await db
-    .select()
-    .from(students)
-    .where(eq(students.nisn, "0102641001"))
-    .limit(1);
-  if (main) return main;
-  const [first] = await db.select().from(students).orderBy(asc(students.nisn)).limit(1);
-  return first;
+  if (authUser?.username) {
+    const [byNisnOrEmail] = await db
+      .select()
+      .from(students)
+      .where(
+        or(eq(students.nisn, authUser.username), eq(students.email, authUser.username))
+      )
+      .limit(1);
+    if (byNisnOrEmail) return byNisnOrEmail;
+  }
+  if (authUser?.role === "admin") {
+    const [first] = await db.select().from(students).orderBy(asc(students.nisn)).limit(1);
+    return first;
+  }
+  return undefined;
 }
 
 function formatStudentProfile(st?: typeof students.$inferSelect) {
@@ -103,11 +105,22 @@ export const getSiswaProfileRoute = createRoute({
         },
       },
     },
+    404: {
+      description: "Student not found",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
   },
 });
 
 siswaRouter.openapi(getSiswaProfileRoute, async (c) => {
-  const st = await getActiveStudentRow(c);
+  const st = await getStudentFromContext(c);
+  if (!st) {
+    return c.json({ success: false, message: "Data siswa tidak ditemukan" }, 404);
+  }
   return c.json(formatStudentProfile(st), 200);
 });
 
@@ -138,14 +151,22 @@ export const updateSiswaProfileRoute = createRoute({
         },
       },
     },
+    404: {
+      description: "Student not found",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
   },
 });
 
 siswaRouter.openapi(updateSiswaProfileRoute, async (c) => {
   const body = c.req.valid("json");
-  const current = await getActiveStudentRow(c);
+  const current = await getStudentFromContext(c);
   if (!current) {
-    return c.json(formatStudentProfile(undefined), 200);
+    return c.json({ success: false, message: "Data siswa tidak ditemukan" }, 404);
   }
 
   const [updated] = await db
@@ -202,13 +223,24 @@ export const getMetrikKehadiranRoute = createRoute({
         },
       },
     },
+    404: {
+      description: "Student not found",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
   },
 });
 
 siswaRouter.openapi(getMetrikKehadiranRoute, async (c) => {
-  const st = await getActiveStudentRow(c);
-  const studentNisn = st?.nisn || "";
-  const studentName = st?.full_name || "";
+  const st = await getStudentFromContext(c);
+  if (!st) {
+    return c.json({ success: false, message: "Data siswa tidak ditemukan" }, 404);
+  }
+  const studentNisn = st.nisn;
+  const studentName = st.full_name;
 
   let hadir = 0;
   let izin = 0;
@@ -295,12 +327,23 @@ export const getJadwalHariIniRoute = createRoute({
         },
       },
     },
+    404: {
+      description: "Student not found",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
   },
 });
 
 siswaRouter.openapi(getJadwalHariIniRoute, async (c) => {
-  const st = await getActiveStudentRow(c);
-  const studentKelas = st?.kelas || "X RPL 1";
+  const st = await getStudentFromContext(c);
+  if (!st) {
+    return c.json({ success: false, message: "Data siswa tidak ditemukan" }, 404);
+  }
+  const studentKelas = st.kelas;
   const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
   const currentDay = dayNames[new Date().getDay()] || "Senin";
   const targetDay = currentDay === "Minggu" || currentDay === "Sabtu" ? "Senin" : currentDay;
@@ -369,12 +412,23 @@ export const getJadwalMingguanRoute = createRoute({
         },
       },
     },
+    404: {
+      description: "Student not found",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
   },
 });
 
 siswaRouter.openapi(getJadwalMingguanRoute, async (c) => {
-  const st = await getActiveStudentRow(c);
-  const studentKelas = st?.kelas || "X RPL 1";
+  const st = await getStudentFromContext(c);
+  if (!st) {
+    return c.json({ success: false, message: "Data siswa tidak ditemukan" }, 404);
+  }
+  const studentKelas = st.kelas;
   const allSchedules = await db
     .select()
     .from(schedules)
@@ -387,15 +441,14 @@ siswaRouter.openapi(getJadwalMingguanRoute, async (c) => {
   const currentDayName = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"][
     currentDayIndex
   ];
-  const mondayOffset = currentDayIndex === 0 ? -6 : 1 - currentDayIndex;
-  const mondayDate = new Date(now);
-  mondayDate.setDate(now.getDate() + mondayOffset);
+  const monday = new Date();
+  monday.setDate(monday.getDate() - ((monday.getDay() - 1 + 7) % 7));
 
   const result = days.map((dayName, idx) => {
-    const dayDate = new Date(mondayDate);
-    dayDate.setDate(mondayDate.getDate() + idx);
+    const dayDate = new Date(monday);
+    dayDate.setDate(monday.getDate() + idx);
     const tanggalLabel = dayDate.toLocaleDateString("id-ID", {
-      day: "numeric",
+      day: "2-digit",
       month: "long",
       year: "numeric",
     });
@@ -447,11 +500,22 @@ export const getAbsensiRealtimeRoute = createRoute({
         },
       },
     },
+    404: {
+      description: "Student not found",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
   },
 });
 
 siswaRouter.openapi(getAbsensiRealtimeRoute, async (c) => {
-  const st = await getActiveStudentRow(c);
+  const st = await getStudentFromContext(c);
+  if (!st) {
+    return c.json({ success: false, message: "Data siswa tidak ditemukan" }, 404);
+  }
   let status = "Hadir";
   let jamMasuk = "06:45";
   let keterangan = "Tepat waktu";
@@ -529,13 +593,24 @@ export const getRiwayatKehadiranRoute = createRoute({
         },
       },
     },
+    404: {
+      description: "Student not found",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
   },
 });
 
 siswaRouter.openapi(getRiwayatKehadiranRoute, async (c) => {
-  const st = await getActiveStudentRow(c);
-  const studentNisn = st?.nisn || "";
-  const studentName = st?.full_name || "";
+  const st = await getStudentFromContext(c);
+  if (!st) {
+    return c.json({ success: false, message: "Data siswa tidak ditemukan" }, 404);
+  }
+  const studentNisn = st.nisn;
+  const studentName = st.full_name;
 
   const history: { id: string; tanggal: string; jam: string; status: string; keterangan: string }[] =
     [];
@@ -586,20 +661,6 @@ siswaRouter.openapi(getRiwayatKehadiranRoute, async (c) => {
     });
   }
 
-  if (history.length < 3) {
-    history.push(
-      { id: "rk-1", tanggal: "03/03/2025", jam: "06:45 WIB", status: "Hadir", keterangan: "Tepat waktu" },
-      { id: "rk-2", tanggal: "02/03/2025", jam: "07:00 – 07:45", status: "Hadir", keterangan: "—" },
-      {
-        id: "rk-3",
-        tanggal: "01/03/2025",
-        jam: "07:00 – 07:45",
-        status: "Izin",
-        keterangan: "Keperluan keluarga",
-      }
-    );
-  }
-
   return c.json(history, 200);
 });
 
@@ -644,6 +705,14 @@ export const getRekapKehadiranBulananRoute = createRoute({
         },
       },
     },
+    404: {
+      description: "Student not found",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
   },
 });
 
@@ -651,7 +720,10 @@ siswaRouter.openapi(getRekapKehadiranBulananRoute, async (c) => {
   const { bulan } = c.req.valid("query");
   const bulanKey = (bulan || "2025-01").slice(0, 7);
 
-  const st = await getActiveStudentRow(c);
+  const st = await getStudentFromContext(c);
+  if (!st) {
+    return c.json({ success: false, message: "Data siswa tidak ditemukan" }, 404);
+  }
   let hadir = 0;
   let izin = 0;
   let sakit = 0;

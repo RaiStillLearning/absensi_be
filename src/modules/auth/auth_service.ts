@@ -4,7 +4,7 @@ import { sign } from "hono/jwt";
 import { db, ensureDatabaseInitialized } from "../../config/database";
 import { env } from "../../config/env";
 import { classes, class_students, students, teachers, users } from "../../config/schema";
-import { verifyPassword } from "../../shared/utils/hash";
+import { hashPassword, verifyPassword } from "../../shared/utils/hash";
 import type { AuthUserProfileSchema } from "./auth_schema";
 
 export type LoginResult =
@@ -78,7 +78,91 @@ export async function authenticateUser(
     )
     .limit(1);
 
-  const dbUser = found[0];
+  let dbUser = found[0];
+
+  // Jika belum ada di `users`, cek apakah guru ada di tabel `teachers` (auto-create user dengan password hash dari env)
+  if (!dbUser) {
+    const [matchedTeacher] = await db
+      .select()
+      .from(teachers)
+      .where(
+        or(
+          eq(teachers.nip, cleanNip),
+          eq(teachers.nip, usernameInput.trim()),
+          eq(teachers.email, cleanUser)
+        )
+      )
+      .limit(1);
+
+    if (matchedTeacher) {
+      const [existingUser] = await db
+        .select()
+        .from(users)
+        .where(eq(users.teacher_id, matchedTeacher.id))
+        .limit(1);
+
+      if (!existingUser) {
+        const defaultPassword = env.STUDENT_DEFAULT_PASSWORD;
+        const [newUser] = await db
+          .insert(users)
+          .values({
+            username: matchedTeacher.nip || `guru_${matchedTeacher.id}`,
+            password_hash: hashPassword(defaultPassword),
+            role: matchedTeacher.is_walas ? "walas" : "guru",
+            nama_lengkap: matchedTeacher.nama_guru,
+            email: matchedTeacher.email || "",
+            teacher_id: matchedTeacher.id,
+            is_active: true,
+          })
+          .returning();
+        dbUser = newUser;
+      } else {
+        dbUser = existingUser;
+      }
+    }
+
+    if (!dbUser) {
+      const [matchedStudent] = await db
+        .select()
+        .from(students)
+        .where(
+          or(
+            eq(students.nisn, cleanNip),
+            eq(students.nisn, usernameInput.trim()),
+            eq(students.email, cleanUser)
+          )
+        )
+        .limit(1);
+
+      if (matchedStudent) {
+        const [existingStudentUser] = await db
+          .select()
+          .from(users)
+          .where(eq(users.student_id, matchedStudent.id))
+          .limit(1);
+
+        if (!existingStudentUser) {
+          const defaultPassword = env.STUDENT_DEFAULT_PASSWORD;
+          const [newStudentUser] = await db
+            .insert(users)
+            .values({
+              username: matchedStudent.nisn,
+              password_hash: hashPassword(defaultPassword),
+              role: "siswa",
+              nama_lengkap: matchedStudent.full_name,
+              email: matchedStudent.email || "",
+              student_id: matchedStudent.id,
+              is_active: true,
+            })
+            .returning();
+          dbUser = newStudentUser;
+        } else {
+          dbUser = existingStudentUser;
+        }
+      }
+    }
+  }
+
   if (!dbUser) {
     return {
       status: "invalid_credentials",
@@ -162,7 +246,7 @@ export async function authenticateUser(
     if (!teacherRow) {
       return {
         status: "invalid_credentials",
-        message: "Data profil guru tidak ditemukan untuk akun ini.",
+        message: "Data guru tidak ditemukan. Hubungi administrator.",
       };
     }
 
@@ -228,7 +312,7 @@ export async function authenticateUser(
   if (!studentRow) {
     return {
       status: "invalid_credentials",
-      message: "Data profil siswa tidak ditemukan untuk akun ini.",
+      message: "Data siswa tidak ditemukan. Hubungi administrator.",
     };
   }
 
@@ -313,15 +397,10 @@ export async function getUserProfile(
 
   if (role === "guru" || role === "walas") {
     const numericId = Number(userId);
-    let guru: typeof teachers.$inferSelect | undefined;
-    if (!Number.isNaN(numericId) && numericId > 0) {
-      const [byId] = await db.select().from(teachers).where(eq(teachers.id, numericId)).limit(1);
-      guru = byId;
+    if (Number.isNaN(numericId) || numericId <= 0) {
+      throw new Error("User ID tidak valid");
     }
-    if (!guru) {
-      const [byNip] = await db.select().from(teachers).where(eq(teachers.nip, userId)).limit(1);
-      guru = byNip;
-    }
+    const [guru] = await db.select().from(teachers).where(eq(teachers.id, numericId)).limit(1);
     if (!guru) return null;
 
     return {

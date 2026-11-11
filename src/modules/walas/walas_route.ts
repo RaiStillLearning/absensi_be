@@ -9,7 +9,7 @@ import {
   students,
   teachers,
 } from "../../config/schema";
-import { getAuthUser } from "../../middlewares/auth";
+import { type DecodedAuthToken } from "../../middlewares/auth";
 import { API_TAGS } from "../../shared/constants";
 import { ErrorResponseSchema } from "../../shared/types/api";
 
@@ -130,34 +130,37 @@ export const getWalasDashboardRoute = createRoute({
   },
 });
 
-async function getActiveWalasTeacherRow(c?: Context) {
-  const authUser = c ? getAuthUser(c) : null;
-  if (authUser) {
-    const teacherId = Number(authUser.sub);
-    if (!Number.isNaN(teacherId) && teacherId > 0) {
-      const [byId] = await db.select().from(teachers).where(eq(teachers.id, teacherId)).limit(1);
-      if (byId) return byId;
-    }
-    if (authUser.username) {
-      const [byNipOrEmail] = await db
-        .select()
-        .from(teachers)
-        .where(
-          or(eq(teachers.nip, authUser.username), eq(teachers.email, authUser.username))
-        )
-        .limit(1);
-      if (byNipOrEmail) return byNipOrEmail;
-    }
+async function getActiveWalasTeacherRow(c: Context) {
+  const authUser = c.get("authUser") as DecodedAuthToken | undefined;
+  const teacherId = Number(authUser?.sub);
+  if (teacherId && !Number.isNaN(teacherId)) {
+    const [guru] = await db
+      .select()
+      .from(teachers)
+      .where(eq(teachers.id, teacherId))
+      .limit(1);
+    return guru;
   }
-  const [rina] = await db.select().from(teachers).where(eq(teachers.id, 5)).limit(1);
-  if (rina) return rina;
-  const [firstWalas] = await db
-    .select()
-    .from(teachers)
-    .where(eq(teachers.is_walas, true))
-    .orderBy(asc(teachers.id))
-    .limit(1);
-  return firstWalas;
+  if (authUser?.username) {
+    const [byNipOrEmail] = await db
+      .select()
+      .from(teachers)
+      .where(
+        or(eq(teachers.nip, authUser.username), eq(teachers.email, authUser.username))
+      )
+      .limit(1);
+    if (byNipOrEmail) return byNipOrEmail;
+  }
+  if (authUser?.role === "admin") {
+    const [firstWalas] = await db
+      .select()
+      .from(teachers)
+      .where(eq(teachers.is_walas, true))
+      .orderBy(asc(teachers.id))
+      .limit(1);
+    return firstWalas;
+  }
+  return undefined;
 }
 
 walasRouter.openapi(getWalasDashboardRoute, async (c) => {
