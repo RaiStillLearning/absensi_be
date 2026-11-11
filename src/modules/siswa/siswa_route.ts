@@ -1,5 +1,6 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { and, asc, eq, or } from "drizzle-orm";
+import type { Context } from "hono";
 import { db } from "../../config/database";
 import {
   daily_attendance_records,
@@ -7,6 +8,7 @@ import {
   students,
   subject_attendance_records,
 } from "../../config/schema";
+import { getAuthUser } from "../../middlewares/auth";
 import { API_TAGS } from "../../shared/constants";
 
 export const siswaRouter = new OpenAPIHono();
@@ -32,7 +34,25 @@ export const SiswaProfileSchema = z
   })
   .openapi("SiswaProfile");
 
-async function getActiveStudentRow() {
+async function getActiveStudentRow(c?: Context) {
+  const authUser = c ? getAuthUser(c) : null;
+  if (authUser) {
+    const identifier = authUser.sub || authUser.username;
+    if (identifier) {
+      const [byNisnOrEmail] = await db
+        .select()
+        .from(students)
+        .where(
+          or(
+            eq(students.nisn, identifier),
+            eq(students.nisn, authUser.username),
+            eq(students.email, authUser.username)
+          )
+        )
+        .limit(1);
+      if (byNisnOrEmail) return byNisnOrEmail;
+    }
+  }
   const [main] = await db
     .select()
     .from(students)
@@ -45,22 +65,22 @@ async function getActiveStudentRow() {
 
 function formatStudentProfile(st?: typeof students.$inferSelect) {
   return {
-    nisn: st?.nisn || "0102641001",
-    nis: st?.nis || "242510001",
-    nama_lengkap: st?.full_name || "Ahmad Rizky Pratama",
-    kelas: st?.kelas || "X RPL 1",
-    jurusan: st?.jurusan || "Rekayasa Perangkat Lunak",
-    tempat_lahir: st?.tempat_lahir || "Depok",
-    tanggal_lahir: st?.tanggal_lahir || "14 Maret 2008",
+    nisn: st?.nisn || "",
+    nis: st?.nis || "",
+    nama_lengkap: st?.full_name || "",
+    kelas: st?.kelas || "",
+    jurusan: st?.jurusan || "",
+    tempat_lahir: st?.tempat_lahir || "",
+    tanggal_lahir: st?.tanggal_lahir || "",
     jenis_kelamin: ((st?.gender === "P" ? "Perempuan" : "Laki-laki") as
       | "Laki-laki"
       | "Perempuan"),
-    agama: st?.agama || "Islam",
-    alamat: st?.alamat || "Jl. H. Caraka No. 12, Cisalak, Depok",
-    telepon: st?.telepon || "0812-9876-5432",
-    nama_wali: st?.nama_wali || "Bambang Pratama",
-    telepon_wali: st?.telepon_wali || "0813-1122-3344",
-    email: st?.email || "ahmad.rizky@siswa.ghamacaraka.sch.id",
+    agama: st?.agama || "",
+    alamat: st?.alamat || "",
+    telepon: st?.telepon || "",
+    nama_wali: st?.nama_wali || "",
+    telepon_wali: st?.telepon_wali || "",
+    email: st?.email || "",
     status_akun: ((st?.status === "inactive" ? "Non-Aktif" : "Aktif") as "Aktif" | "Non-Aktif"),
     foto_profil: st?.foto_profil || "",
   };
@@ -87,7 +107,7 @@ export const getSiswaProfileRoute = createRoute({
 });
 
 siswaRouter.openapi(getSiswaProfileRoute, async (c) => {
-  const st = await getActiveStudentRow();
+  const st = await getActiveStudentRow(c);
   return c.json(formatStudentProfile(st), 200);
 });
 
@@ -123,7 +143,7 @@ export const updateSiswaProfileRoute = createRoute({
 
 siswaRouter.openapi(updateSiswaProfileRoute, async (c) => {
   const body = c.req.valid("json");
-  const current = await getActiveStudentRow();
+  const current = await getActiveStudentRow(c);
   if (!current) {
     return c.json(formatStudentProfile(undefined), 200);
   }
@@ -186,9 +206,9 @@ export const getMetrikKehadiranRoute = createRoute({
 });
 
 siswaRouter.openapi(getMetrikKehadiranRoute, async (c) => {
-  const st = await getActiveStudentRow();
-  const studentNisn = st?.nisn || "0102641001";
-  const studentName = st?.full_name || "Ahmad Rizky Pratama";
+  const st = await getActiveStudentRow(c);
+  const studentNisn = st?.nisn || "";
+  const studentName = st?.full_name || "";
 
   let hadir = 0;
   let izin = 0;
@@ -209,28 +229,23 @@ siswaRouter.openapi(getMetrikKehadiranRoute, async (c) => {
     }
   }
 
-  const subjectRecords = await db
-    .select()
-    .from(subject_attendance_records)
-    .where(
-      or(
-        eq(subject_attendance_records.nisn, studentNisn),
-        eq(subject_attendance_records.nama_siswa, studentName)
-      )
-    );
+  if (studentNisn || studentName) {
+    const subjectRecords = await db
+      .select()
+      .from(subject_attendance_records)
+      .where(
+        or(
+          eq(subject_attendance_records.nisn, studentNisn),
+          eq(subject_attendance_records.nama_siswa, studentName)
+        )
+      );
 
-  for (const sr of subjectRecords) {
-    if (sr.status === "Hadir") hadir++;
-    else if (sr.status === "Izin") izin++;
-    else if (sr.status === "Sakit") sakit++;
-    else alpa++;
-  }
-
-  if (hadir + izin + sakit + alpa < 10) {
-    hadir += 22;
-    izin += 2;
-    sakit += 2;
-    alpa += 1;
+    for (const sr of subjectRecords) {
+      if (sr.status === "Hadir") hadir++;
+      else if (sr.status === "Izin") izin++;
+      else if (sr.status === "Sakit") sakit++;
+      else alpa++;
+    }
   }
 
   const total_hari = hadir + izin + sakit + alpa;
@@ -284,7 +299,7 @@ export const getJadwalHariIniRoute = createRoute({
 });
 
 siswaRouter.openapi(getJadwalHariIniRoute, async (c) => {
-  const st = await getActiveStudentRow();
+  const st = await getActiveStudentRow(c);
   const studentKelas = st?.kelas || "X RPL 1";
   const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
   const currentDay = dayNames[new Date().getDay()] || "Senin";
@@ -358,7 +373,7 @@ export const getJadwalMingguanRoute = createRoute({
 });
 
 siswaRouter.openapi(getJadwalMingguanRoute, async (c) => {
-  const st = await getActiveStudentRow();
+  const st = await getActiveStudentRow(c);
   const studentKelas = st?.kelas || "X RPL 1";
   const allSchedules = await db
     .select()
@@ -367,11 +382,24 @@ siswaRouter.openapi(getJadwalMingguanRoute, async (c) => {
     .orderBy(asc(schedules.jam_ke));
 
   const days = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat"];
+  const now = new Date();
+  const currentDayIndex = now.getDay();
   const currentDayName = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"][
-    new Date().getDay()
+    currentDayIndex
   ];
+  const mondayOffset = currentDayIndex === 0 ? -6 : 1 - currentDayIndex;
+  const mondayDate = new Date(now);
+  mondayDate.setDate(now.getDate() + mondayOffset);
 
   const result = days.map((dayName, idx) => {
+    const dayDate = new Date(mondayDate);
+    dayDate.setDate(mondayDate.getDate() + idx);
+    const tanggalLabel = dayDate.toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+
     const lessons = allSchedules
       .filter((j) => j.hari.toLowerCase() === dayName.toLowerCase())
       .map((j, i) => ({
@@ -383,7 +411,7 @@ siswaRouter.openapi(getJadwalMingguanRoute, async (c) => {
 
     return {
       hari: dayName,
-      tanggal: `${idx + 3} Maret 2025`,
+      tanggal: tanggalLabel,
       isToday: dayName === currentDayName,
       pelajaran:
         lessons.length > 0
@@ -423,7 +451,7 @@ export const getAbsensiRealtimeRoute = createRoute({
 });
 
 siswaRouter.openapi(getAbsensiRealtimeRoute, async (c) => {
-  const st = await getActiveStudentRow();
+  const st = await getActiveStudentRow(c);
   let status = "Hadir";
   let jamMasuk = "06:45";
   let keterangan = "Tepat waktu";
@@ -505,9 +533,9 @@ export const getRiwayatKehadiranRoute = createRoute({
 });
 
 siswaRouter.openapi(getRiwayatKehadiranRoute, async (c) => {
-  const st = await getActiveStudentRow();
-  const studentNisn = st?.nisn || "0102641001";
-  const studentName = st?.full_name || "Ahmad Rizky Pratama";
+  const st = await getActiveStudentRow(c);
+  const studentNisn = st?.nisn || "";
+  const studentName = st?.full_name || "";
 
   const history: { id: string; tanggal: string; jam: string; status: string; keterangan: string }[] =
     [];
@@ -623,33 +651,46 @@ siswaRouter.openapi(getRekapKehadiranBulananRoute, async (c) => {
   const { bulan } = c.req.valid("query");
   const bulanKey = (bulan || "2025-01").slice(0, 7);
 
-  const st = await getActiveStudentRow();
-  let extraHadir = 2;
-  let extraIzin = 0;
-  let extraSakit = 0;
-  let extraAlpa = 0;
+  const st = await getActiveStudentRow(c);
+  let hadir = 0;
+  let izin = 0;
+  let sakit = 0;
+  let alpa = 0;
 
   if (st) {
-    const [rec] = await db
-      .select()
+    const dailyRecords = await db
+      .select({ status: daily_attendance_records.attendance_status })
       .from(daily_attendance_records)
-      .where(eq(daily_attendance_records.student_id, st.id))
-      .limit(1);
-    if (rec) {
-      extraHadir = rec.attendance_status === "present" ? 2 : 0;
-      extraIzin = rec.attendance_status === "excused" ? 1 : 0;
-      extraSakit = rec.attendance_status === "sick" ? 1 : 0;
-      extraAlpa = rec.attendance_status === "absent" ? 1 : 0;
+      .where(eq(daily_attendance_records.student_id, st.id));
+
+    for (const rec of dailyRecords) {
+      if (rec.status === "present") hadir++;
+      else if (rec.status === "excused") izin++;
+      else if (rec.status === "sick") sakit++;
+      else if (rec.status === "absent") alpa++;
+    }
+
+    const subjectRecords = await db
+      .select({ status: subject_attendance_records.status })
+      .from(subject_attendance_records)
+      .where(
+        or(
+          eq(subject_attendance_records.nisn, st.nisn),
+          eq(subject_attendance_records.nama_siswa, st.full_name)
+        )
+      );
+
+    for (const sr of subjectRecords) {
+      if (sr.status === "Hadir") hadir++;
+      else if (sr.status === "Izin") izin++;
+      else if (sr.status === "Sakit") sakit++;
+      else alpa++;
     }
   }
 
-  const hadir = 140 + extraHadir;
-  const izin = 12 + extraIzin;
-  const sakit = 8 + extraSakit;
-  const alpa = 3 + extraAlpa;
-
   const totalPencatatan = hadir + izin + sakit + alpa;
   const persentaseHadir = totalPencatatan > 0 ? Math.round((hadir / totalPencatatan) * 100) : 0;
+  const safeDivisor = totalPencatatan > 0 ? totalPencatatan : 1;
 
   const monthNames = [
     "Januari",
@@ -674,7 +715,7 @@ siswaRouter.openapi(getRekapKehadiranBulananRoute, async (c) => {
       key: "hadir",
       label: "Hadir",
       count: hadir,
-      pct: Math.round((hadir / totalPencatatan) * 100),
+      pct: Math.round((hadir / safeDivisor) * 100),
       color: "#10B981",
       dotColor: "#10B981",
     },
@@ -682,7 +723,7 @@ siswaRouter.openapi(getRekapKehadiranBulananRoute, async (c) => {
       key: "izin",
       label: "Izin",
       count: izin,
-      pct: Math.round((izin / totalPencatatan) * 100),
+      pct: Math.round((izin / safeDivisor) * 100),
       color: "#3B82F6",
       dotColor: "#3B82F6",
     },
@@ -690,7 +731,7 @@ siswaRouter.openapi(getRekapKehadiranBulananRoute, async (c) => {
       key: "sakit",
       label: "Sakit",
       count: sakit,
-      pct: Math.round((sakit / totalPencatatan) * 100),
+      pct: Math.round((sakit / safeDivisor) * 100),
       color: "#F59E0B",
       dotColor: "#F59E0B",
     },
@@ -698,7 +739,7 @@ siswaRouter.openapi(getRekapKehadiranBulananRoute, async (c) => {
       key: "alpa",
       label: "Alpa",
       count: alpa,
-      pct: Math.round((alpa / totalPencatatan) * 100),
+      pct: Math.round((alpa / safeDivisor) * 100),
       color: "#EF4444",
       dotColor: "#EF4444",
     },

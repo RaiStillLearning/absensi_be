@@ -100,8 +100,8 @@ apiV1Router.use("/admin/*", requireAuth(["admin"]));
 apiV1Router.use("/guru", requireAuth(["admin", "guru", "walas"]));
 apiV1Router.use("/guru/*", requireAuth(["admin", "guru", "walas"]));
 
-apiV1Router.use("/walas", requireAuth(["admin", "guru", "walas"]));
-apiV1Router.use("/walas/*", requireAuth(["admin", "guru", "walas"]));
+apiV1Router.use("/walas", requireAuth(["admin", "walas"]));
+apiV1Router.use("/walas/*", requireAuth(["admin", "walas"]));
 
 apiV1Router.use("/jadwal", requireAuth(["admin", "guru", "walas", "siswa"]));
 apiV1Router.use("/jadwal/*", requireAuth(["admin", "guru", "walas", "siswa"]));
@@ -109,8 +109,8 @@ apiV1Router.use("/jadwal/*", requireAuth(["admin", "guru", "walas", "siswa"]));
 apiV1Router.use("/absensi", requireAuth(["admin", "guru", "walas"]));
 apiV1Router.use("/absensi/*", requireAuth(["admin", "guru", "walas"]));
 
-apiV1Router.use("/siswa", requireAuth(["admin", "guru", "walas", "siswa"]));
-apiV1Router.use("/siswa/*", requireAuth(["admin", "guru", "walas", "siswa"]));
+apiV1Router.use("/siswa", requireAuth(["admin", "siswa"]));
+apiV1Router.use("/siswa/*", requireAuth(["admin", "siswa"]));
 
 // Mount All Domain Routers
 apiV1Router.route("/auth", authRouter);

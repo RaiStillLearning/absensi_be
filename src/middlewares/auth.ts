@@ -11,6 +11,51 @@ export interface DecodedAuthToken {
 }
 
 /**
+ * Helper to retrieve authenticated user payload from Hono context
+ */
+export function getAuthUser(c: Context): DecodedAuthToken | undefined {
+  return c.get("authUser") as DecodedAuthToken | undefined;
+}
+
+/**
+ * Simple in-memory rate limiter for authentication endpoints
+ */
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+
+export function rateLimitAuth(maxAttempts = 20, windowMs = 15 * 60 * 1000) {
+  return async (c: Context, next: Next) => {
+    if (env.APP_ENV === "test") {
+      await next();
+      return;
+    }
+
+    const ip =
+      c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
+      c.req.header("x-real-ip") ||
+      "local";
+    const now = Date.now();
+    const entry = loginAttempts.get(ip);
+
+    if (!entry || now > entry.resetAt) {
+      loginAttempts.set(ip, { count: 1, resetAt: now + windowMs });
+    } else {
+      entry.count += 1;
+      if (entry.count > maxAttempts) {
+        return c.json(
+          {
+            success: false,
+            message: "Terlalu banyak percobaan login. Silakan coba lagi beberapa saat.",
+          },
+          429
+        );
+      }
+    }
+
+    await next();
+  };
+}
+
+/**
  * Middleware untuk memvalidasi JWT Bearer token dan otorisasi role
  */
 export function requireAuth(allowedRoles?: string[]) {
@@ -48,9 +93,9 @@ export function requireAuth(allowedRoles?: string[]) {
         const isWalas = Boolean(decoded.isWalas);
         const hasAccess =
           allowedRoles.includes(userRole) ||
-          (allowedRoles.includes("walas") && (isWalas || userRole === "guru")) ||
+          (allowedRoles.includes("walas") && isWalas) ||
           (allowedRoles.includes("guru") && isWalas) ||
-          userRole === "admin"; // Admin memiliki akses supervisor
+          userRole === "admin";
 
         if (!hasAccess) {
           return c.json(
@@ -77,4 +122,3 @@ export function requireAuth(allowedRoles?: string[]) {
     }
   };
 }
-

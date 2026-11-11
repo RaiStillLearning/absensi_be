@@ -12,6 +12,7 @@ export type LoginResult =
       status: "success";
       data: {
         access_token: string;
+        refresh_token?: string;
         token_type: "Bearer";
         user: {
           id: string;
@@ -29,10 +30,16 @@ export type LoginResult =
           nisn?: string;
           kelas?: string;
           jurusan?: string;
-          student?: any;
+          student?: {
+            id: string;
+            nisn: string;
+            full_name: string;
+            class_name: string;
+          };
         };
       };
       access_token?: string;
+      refresh_token?: string;
       user?: any;
     }
   | {
@@ -45,7 +52,8 @@ export type LoginResult =
     };
 
 /**
- * Universal authentication service for Admin, Guru, Walas, and Siswa (100% PostgreSQL via Drizzle ORM)
+ * Universal authentication service for Admin, Guru, Walas, and Siswa (100% PostgreSQL via Drizzle ORM).
+ * All passwords must be cryptographically hashed in the `users` table.
  */
 export async function authenticateUser(
   usernameInput: string,
@@ -70,66 +78,15 @@ export async function authenticateUser(
     )
     .limit(1);
 
-  let dbUser = found[0];
-
-  // If user is a teacher logging in with NIP that wasn't in `users` yet, check `teachers` table
+  const dbUser = found[0];
   if (!dbUser) {
-    const [matchedTeacher] = await db
-      .select()
-      .from(teachers)
-      .where(or(eq(teachers.nip, cleanNip), eq(teachers.nip, usernameInput.trim())))
-      .limit(1);
-
-    if (matchedTeacher) {
-      if (cleanPass !== "guru123" && cleanPass !== "password") {
-        return {
-          status: "invalid_credentials",
-          message: "Password yang Anda masukkan tidak sesuai.",
-        };
-      }
-      const isWalas = Boolean(matchedTeacher.is_walas);
-      const kelasWalas = matchedTeacher.kelas_walas || "";
-      const payload = {
-        sub: String(matchedTeacher.id),
-        username: matchedTeacher.nip || "guru",
-        role: "guru",
-        isWalas,
-        exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24,
-      };
-      const token = await sign(payload, env.JWT_SECRET);
-      const userProfile = {
-        id: String(matchedTeacher.id),
-        username: matchedTeacher.nip || "guru",
-        role: "guru",
-        peran: "Guru",
-        nama_lengkap: matchedTeacher.nama_guru,
-        email: matchedTeacher.email || "",
-        mata_pelajaran: matchedTeacher.mata_pelajaran,
-        nip: matchedTeacher.nip || "",
-        isWalas,
-        kelasWalas,
-        kelas_diampu: kelasWalas,
-        foto_profil: matchedTeacher.foto_profil || "",
-      };
-      return {
-        status: "success",
-        data: {
-          access_token: token,
-          token_type: "Bearer",
-          user: userProfile,
-        },
-        access_token: token,
-        user: userProfile,
-      };
-    }
-
     return {
       status: "invalid_credentials",
       message: "Username atau password yang Anda masukkan tidak terdaftar.",
     };
   }
 
-  // Verify password hash from PostgreSQL
+  // 2. Verify cryptographic password hash from PostgreSQL
   const isPasswordValid = verifyPassword(cleanPass, dbUser.password_hash);
   if (!isPasswordValid) {
     return {
@@ -145,85 +102,112 @@ export async function authenticateUser(
     };
   }
 
+  const nowSec = Math.floor(Date.now() / 1000);
+  const accessExp = nowSec + 60 * 60 * 8; // 8 hours
+  const refreshExp = nowSec + 60 * 60 * 24 * 7; // 7 days
+
   // Role Admin
   if (dbUser.role === "admin") {
     const payload = {
       sub: dbUser.id,
       username: dbUser.username,
       role: "admin",
-      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24,
+      exp: accessExp,
     };
     const token = await sign(payload, env.JWT_SECRET);
+    const refreshToken = await sign({ ...payload, type: "refresh", exp: refreshExp }, env.JWT_SECRET);
     const userProfile = {
       id: dbUser.id,
       username: dbUser.username,
       role: "admin",
       peran: "Administrator",
-      nama_lengkap: dbUser.nama_lengkap || "Admin",
-      email: dbUser.email || "admin@sekolah.example",
+      nama_lengkap: dbUser.nama_lengkap || "",
+      email: dbUser.email || "",
       foto_profil: dbUser.foto_profil || "",
     };
     return {
       status: "success",
       data: {
         access_token: token,
+        refresh_token: refreshToken,
         token_type: "Bearer",
         user: userProfile,
       },
       access_token: token,
+      refresh_token: refreshToken,
       user: userProfile,
     };
   }
 
   // Role Guru / Walas
   if (dbUser.role === "guru" || dbUser.role === "walas") {
-    const targetTeacherId = dbUser.teacher_id || 5;
-    const [teacherRow] = await db
-      .select()
-      .from(teachers)
-      .where(eq(teachers.id, targetTeacherId))
-      .limit(1);
+    let teacherRow: typeof teachers.$inferSelect | undefined;
+    if (dbUser.teacher_id) {
+      const [byId] = await db
+        .select()
+        .from(teachers)
+        .where(eq(teachers.id, dbUser.teacher_id))
+        .limit(1);
+      teacherRow = byId;
+    }
+    if (!teacherRow) {
+      const [byNip] = await db
+        .select()
+        .from(teachers)
+        .where(eq(teachers.nip, dbUser.username))
+        .limit(1);
+      teacherRow = byNip;
+    }
 
-    const fallbackTeacher = teacherRow || (await db.select().from(teachers).limit(1))[0];
-    const isWalas = fallbackTeacher ? Boolean(fallbackTeacher.is_walas) : dbUser.role === "walas";
-    const kelasWalas = fallbackTeacher?.kelas_walas || (isWalas ? "X RPL 1" : "");
+    if (!teacherRow) {
+      return {
+        status: "invalid_credentials",
+        message: "Data profil guru tidak ditemukan untuk akun ini.",
+      };
+    }
+
+    const isWalas = Boolean(teacherRow.is_walas) || dbUser.role === "walas";
+    const kelasWalas = teacherRow.kelas_walas || "";
 
     const payload = {
-      sub: String(fallbackTeacher?.id || dbUser.id),
+      sub: String(teacherRow.id),
       username: dbUser.username,
       role: "guru",
       isWalas,
-      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24,
+      exp: accessExp,
     };
     const token = await sign(payload, env.JWT_SECRET);
+    const refreshToken = await sign({ ...payload, type: "refresh", exp: refreshExp }, env.JWT_SECRET);
     const userProfile = {
-      id: String(fallbackTeacher?.id || "5"),
+      id: String(teacherRow.id),
       username: dbUser.username,
       role: "guru",
       peran: "Guru",
-      nama_lengkap: fallbackTeacher?.nama_guru || dbUser.nama_lengkap || "Bu Rina Pratiwi, S.Pd.",
-      email: fallbackTeacher?.email || dbUser.email || "burina@ghamacaraka.sch.id",
-      mata_pelajaran: fallbackTeacher?.mata_pelajaran || "Pemrograman Web",
-      nip: fallbackTeacher?.nip || "198905122015012008",
+      nama_lengkap: teacherRow.nama_guru || dbUser.nama_lengkap || "",
+      email: teacherRow.email || dbUser.email || "",
+      mata_pelajaran: teacherRow.mata_pelajaran,
+      nip: teacherRow.nip || "",
       isWalas,
       kelasWalas,
       kelas_diampu: kelasWalas,
-      foto_profil: fallbackTeacher?.foto_profil || "",
+      foto_profil: teacherRow.foto_profil || "",
     };
     return {
       status: "success",
       data: {
         access_token: token,
+        refresh_token: refreshToken,
         token_type: "Bearer",
         user: userProfile,
       },
       access_token: token,
+      refresh_token: refreshToken,
       user: userProfile,
     };
   }
 
   // Role Siswa
-  let studentRow = null;
+  let studentRow: typeof students.$inferSelect | undefined;
   if (dbUser.student_id) {
     const [s] = await db
       .select()
@@ -240,47 +224,48 @@ export async function authenticateUser(
       .limit(1);
     studentRow = s;
   }
+
   if (!studentRow) {
-    const [s] = await db.select().from(students).limit(1);
-    studentRow = s;
+    return {
+      status: "invalid_credentials",
+      message: "Data profil siswa tidak ditemukan untuk akun ini.",
+    };
   }
 
-  // Resolve class name from class_students relation if available
-  let className = studentRow?.kelas || "X RPL 1";
-  if (studentRow) {
-    const [enrollment] = await db
-      .select({ class_name: classes.name })
-      .from(class_students)
-      .innerJoin(classes, eq(class_students.class_id, classes.id))
-      .where(eq(class_students.student_id, studentRow.id))
-      .limit(1);
-    if (enrollment?.class_name) {
-      className = enrollment.class_name;
-    }
+  let className = studentRow.kelas;
+  const [enrollment] = await db
+    .select({ class_name: classes.name })
+    .from(class_students)
+    .innerJoin(classes, eq(class_students.class_id, classes.id))
+    .where(eq(class_students.student_id, studentRow.id))
+    .limit(1);
+  if (enrollment?.class_name) {
+    className = enrollment.class_name;
   }
 
   const payload = {
-    sub: dbUser.username,
+    sub: studentRow.nisn,
     username: dbUser.username,
     role: "siswa",
-    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24,
+    exp: accessExp,
   };
   const token = await sign(payload, env.JWT_SECRET);
+  const refreshToken = await sign({ ...payload, type: "refresh", exp: refreshExp }, env.JWT_SECRET);
   const userProfile = {
     id: dbUser.id,
     username: dbUser.username,
     role: "siswa",
     peran: "Siswa",
-    nama_lengkap: studentRow?.full_name || dbUser.nama_lengkap || "Ahmad Rizky Pratama",
-    email: studentRow?.email || dbUser.email || "ahmad.rizky@siswa.ghamacaraka.sch.id",
-    nisn: studentRow?.nisn || dbUser.username,
+    nama_lengkap: studentRow.full_name,
+    email: studentRow.email,
+    nisn: studentRow.nisn,
     kelas: className,
-    jurusan: studentRow?.jurusan || "Rekayasa Perangkat Lunak",
-    foto_profil: studentRow?.foto_profil || "",
+    jurusan: studentRow.jurusan,
+    foto_profil: studentRow.foto_profil || "",
     student: {
-      id: studentRow?.id || dbUser.id,
-      nisn: studentRow?.nisn || dbUser.username,
-      full_name: studentRow?.full_name || "Ahmad Rizky Pratama",
+      id: studentRow.id,
+      nisn: studentRow.nisn,
+      full_name: studentRow.full_name,
       class_name: className,
     },
   };
@@ -288,10 +273,12 @@ export async function authenticateUser(
     status: "success",
     data: {
       access_token: token,
+      refresh_token: refreshToken,
       token_type: "Bearer",
       user: userProfile,
     },
     access_token: token,
+    refresh_token: refreshToken,
     user: userProfile,
   };
 }
@@ -299,57 +286,79 @@ export async function authenticateUser(
 export type AuthUserProfile = z.infer<typeof AuthUserProfileSchema>;
 
 /**
- * Get profile of user by decoded JWT payload from PostgreSQL
+ * Get profile of user by decoded JWT payload (`sub` & `role`) from PostgreSQL
  */
-export async function getUserProfile(userId: string, role: string): Promise<AuthUserProfile> {
+export async function getUserProfile(
+  userId: string,
+  role: string
+): Promise<AuthUserProfile | null> {
   await ensureDatabaseInitialized();
 
   if (role === "admin") {
-    const [adminUser] = await db.select().from(users).where(eq(users.role, "admin")).limit(1);
+    const [adminById] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    const adminUser =
+      adminById ||
+      (await db.select().from(users).where(eq(users.role, "admin")).limit(1))[0];
+    if (!adminUser) return null;
     return {
-      id: adminUser?.id || "1",
-      username: adminUser?.username || "admin",
+      id: adminUser.id,
+      username: adminUser.username,
       role: "admin",
       peran: "Administrator",
-      nama_lengkap: adminUser?.nama_lengkap || "Admin",
-      email: adminUser?.email || "admin@sekolah.example",
-      foto_profil: adminUser?.foto_profil || "",
+      nama_lengkap: adminUser.nama_lengkap || "",
+      email: adminUser.email || "",
+      foto_profil: adminUser.foto_profil || "",
     };
   }
 
   if (role === "guru" || role === "walas") {
-    const numericId = Number(userId) || 5;
-    const [guru] = await db.select().from(teachers).where(eq(teachers.id, numericId)).limit(1);
-    const target = guru || (await db.select().from(teachers).limit(1))[0];
+    const numericId = Number(userId);
+    let guru: typeof teachers.$inferSelect | undefined;
+    if (!Number.isNaN(numericId) && numericId > 0) {
+      const [byId] = await db.select().from(teachers).where(eq(teachers.id, numericId)).limit(1);
+      guru = byId;
+    }
+    if (!guru) {
+      const [byNip] = await db.select().from(teachers).where(eq(teachers.nip, userId)).limit(1);
+      guru = byNip;
+    }
+    if (!guru) return null;
+
     return {
-      id: String(target?.id || 5),
-      username: target?.nip || "guru",
+      id: String(guru.id),
+      username: guru.nip || "guru",
       role: "guru",
       peran: "Guru",
-      nama_lengkap: target?.nama_guru || "Bu Rina Pratiwi, S.Pd.",
-      email: target?.email || "",
-      mata_pelajaran: target?.mata_pelajaran || "Pemrograman Web",
-      isWalas: Boolean(target?.is_walas),
-      kelasWalas: target?.kelas_walas || "",
+      nama_lengkap: guru.nama_guru,
+      email: guru.email || "",
+      mata_pelajaran: guru.mata_pelajaran,
+      isWalas: Boolean(guru.is_walas),
+      kelasWalas: guru.kelas_walas || "",
     };
   }
 
-  const [studentRow] = await db
+  let [studentRow] = await db
     .select()
     .from(students)
     .where(eq(students.nisn, userId))
     .limit(1);
-  const targetStudent = studentRow || (await db.select().from(students).limit(1))[0];
+
+  if (!studentRow && /^[0-9a-f-]{36}$/i.test(userId)) {
+    const [byUuid] = await db.select().from(students).where(eq(students.id, userId)).limit(1);
+    studentRow = byUuid;
+  }
+
+  if (!studentRow) return null;
 
   return {
-    id: targetStudent?.nisn || "0102641001",
-    username: targetStudent?.nisn || "0102641001",
+    id: studentRow.nisn,
+    username: studentRow.nisn,
     role: "siswa",
     peran: "Siswa",
-    nama_lengkap: targetStudent?.full_name || "Ahmad Rizky Pratama",
-    email: targetStudent?.email || "ahmad.rizky@siswa.ghamacaraka.sch.id",
-    nisn: targetStudent?.nisn || "0102641001",
-    kelas: targetStudent?.kelas || "X RPL 1",
-    jurusan: targetStudent?.jurusan || "Rekayasa Perangkat Lunak",
+    nama_lengkap: studentRow.full_name,
+    email: studentRow.email,
+    nisn: studentRow.nisn,
+    kelas: studentRow.kelas,
+    jurusan: studentRow.jurusan,
   };
 }

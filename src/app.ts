@@ -87,63 +87,65 @@ app.openapi(healthRoute, (c) => {
 // Modular API v1 Routes
 app.route(APP_CONSTANTS.API_PREFIX, apiV1Router);
 
-// Development Hardware Scanner Test Route (disabled in production)
-app.route("/dev", dev_scanner_router);
+// Development-only routes & Swagger UI (disabled in production)
+if (env.APP_ENV !== "production") {
+  app.route("/dev", dev_scanner_router);
 
-// OpenAPI JSON Document
-app.doc(APP_CONSTANTS.OPENAPI_JSON_PATH, {
-  openapi: "3.0.0",
-  info: {
-    title: APP_CONSTANTS.APP_NAME,
-    version: APP_CONSTANTS.APP_VERSION,
-    description:
-      "Backend API for SMK Ghama Caraka School Attendance System (Sistem Absensi Sekolah).\n\n" +
-      "Provides structured RESTful endpoints for attendance tracking, role-based workflows, and reporting.",
-    contact: {
-      name: "SMK Ghama Caraka Backend Engineering",
+  // OpenAPI JSON Document
+  app.doc(APP_CONSTANTS.OPENAPI_JSON_PATH, {
+    openapi: "3.0.0",
+    info: {
+      title: APP_CONSTANTS.APP_NAME,
+      version: APP_CONSTANTS.APP_VERSION,
+      description:
+        "Backend API for SMK Ghama Caraka School Attendance System (Sistem Absensi Sekolah).\n\n" +
+        "Provides structured RESTful endpoints for attendance tracking, role-based workflows, and reporting.",
+      contact: {
+        name: "SMK Ghama Caraka Backend Engineering",
+      },
     },
-  },
-  servers: [
-    {
-      url: `http://localhost:${env.APP_PORT}`,
-      description: "Local Development Server",
-    },
-  ],
-  tags: [
-    {
-      name: API_TAGS.GENERAL,
-      description: "General system status and health endpoints",
-    },
-    {
-      name: API_TAGS.AUTHENTICATION,
-      description: "Authentication and session management for all school roles",
-    },
-    {
-      name: API_TAGS.ADMIN,
-      description: "Administrator operations for master data, users, and school configuration",
-    },
-    {
-      name: API_TAGS.WALAS,
-      description: "Wali Kelas (Homeroom Teacher) attendance oversight and reporting",
-    },
-    {
-      name: API_TAGS.GURU,
-      description: "Guru Mata Pelajaran (Subject Teacher) attendance tracking and sessions",
-    },
-    {
-      name: API_TAGS.SISWA,
-      description: "Siswa (Student) attendance check-in, schedules, and personal records",
-    },
-  ],
-});
+    servers: [
+      {
+        url: `http://localhost:${env.APP_PORT}`,
+        description: "Local Development Server",
+      },
+    ],
+    tags: [
+      {
+        name: API_TAGS.GENERAL,
+        description: "General system status and health endpoints",
+      },
+      {
+        name: API_TAGS.AUTHENTICATION,
+        description: "Authentication and session management for all school roles",
+      },
+      {
+        name: API_TAGS.ADMIN,
+        description: "Administrator operations for master data, users, and school configuration",
+      },
+      {
+        name: API_TAGS.WALAS,
+        description: "Wali Kelas (Homeroom Teacher) attendance oversight and reporting",
+      },
+      {
+        name: API_TAGS.GURU,
+        description: "Guru Mata Pelajaran (Subject Teacher) attendance tracking and sessions",
+      },
+      {
+        name: API_TAGS.SISWA,
+        description: "Siswa (Student) attendance check-in, schedules, and personal records",
+      },
+    ],
+  });
 
-// Swagger UI Route
-app.get(
-  APP_CONSTANTS.DOCS_PATH,
-  swaggerUI({
-    url: APP_CONSTANTS.OPENAPI_JSON_PATH,
-  })
-);
+  // Swagger UI Route
+  app.get(
+    APP_CONSTANTS.DOCS_PATH,
+    swaggerUI({
+      url: APP_CONSTANTS.OPENAPI_JSON_PATH,
+    })
+  );
+}
 
 // Centralized Error and Not Found Handlers
 app.notFound(notFoundHandler);

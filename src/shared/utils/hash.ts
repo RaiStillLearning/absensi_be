@@ -10,7 +10,8 @@ export function hashPassword(password: string): string {
 }
 
 /**
- * Verify a plain password against a stored scrypt hash, bcrypt hash, or fallback plaintext
+ * Verify a plain password against a stored scrypt hash or bcrypt hash.
+ * Plaintext fallback is strictly disabled for security.
  */
 export function verifyPassword(password: string, storedHash: string): boolean {
   try {
@@ -29,8 +30,7 @@ export function verifyPassword(password: string, storedHash: string): boolean {
       return (globalThis as any).Bun.password.verifySync(password, storedHash);
     }
 
-    // Direct comparison for legacy or plain string fallback
-    return password === storedHash;
+    return false;
   } catch {
     return false;
   }

@@ -1,6 +1,7 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-import { verify } from "hono/jwt";
+import { sign, verify } from "hono/jwt";
 import { env } from "../../config/env";
+import { rateLimitAuth } from "../../middlewares/auth";
 import { API_TAGS } from "../../shared/constants";
 import { ErrorResponseSchema } from "../../shared/types/api";
 import {
@@ -11,6 +12,10 @@ import {
 import { authenticateUser, getUserProfile } from "./auth_service";
 
 export const authRouter = new OpenAPIHono();
+
+authRouter.use("/login", rateLimitAuth());
+authRouter.use("/guru/login", rateLimitAuth());
+authRouter.use("/siswa/login", rateLimitAuth());
 
 /**
  * 1. POST /api/v1/auth/login (Universal Login)
@@ -280,6 +285,9 @@ authRouter.openapi(meRoute, async (c) => {
     return c.json({ success: false, message: "Token tidak valid atau telah kedaluwarsa" }, 401);
   }
   const profile = await getUserProfile(userId, role);
+  if (!profile) {
+    return c.json({ success: false, message: "Profil pengguna tidak ditemukan" }, 401);
+  }
   return c.json(
     {
       success: true,
@@ -288,4 +296,70 @@ authRouter.openapi(meRoute, async (c) => {
     },
     200
   );
+});
+
+/**
+ * 5. POST /api/v1/auth/refresh
+ */
+export const refreshRoute = createRoute({
+  method: "post",
+  path: "/refresh",
+  tags: [API_TAGS.AUTHENTICATION],
+  summary: "Refresh JWT Access Token",
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            refresh_token: z.string(),
+          }),
+        },
+      },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: "Token refreshed",
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean(),
+            access_token: z.string(),
+          }),
+        },
+      },
+    },
+    401: {
+      description: "Invalid refresh token",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+authRouter.openapi(refreshRoute, async (c) => {
+  const { refresh_token } = c.req.valid("json");
+  try {
+    const payload = (await verify(refresh_token, env.JWT_SECRET, "HS256")) as any;
+    if (!payload || !payload.role || !payload.sub) {
+      return c.json({ success: false, message: "Refresh token tidak valid" }, 401);
+    }
+    const newAccessToken = await sign(
+      {
+        sub: payload.sub,
+        username: payload.username,
+        role: payload.role,
+        isWalas: payload.isWalas,
+        exp: Math.floor(Date.now() / 1000) + 60 * 60 * 8,
+      },
+      env.JWT_SECRET
+    );
+    return c.json({ success: true, access_token: newAccessToken }, 200);
+  } catch {
+    return c.json({ success: false, message: "Refresh token telah kedaluwarsa atau tidak valid" }, 401);
+  }
 });

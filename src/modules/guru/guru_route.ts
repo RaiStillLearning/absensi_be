@@ -1,13 +1,17 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, or } from "drizzle-orm";
+import type { Context } from "hono";
 import { db } from "../../config/database";
+import { env } from "../../config/env";
 import {
   activity_logs,
+  schedules,
   students,
   subject_attendance_records,
   teachers,
   users,
 } from "../../config/schema";
+import { getAuthUser } from "../../middlewares/auth";
 import { API_TAGS } from "../../shared/constants";
 import { ErrorResponseSchema } from "../../shared/types/api";
 import { hashPassword } from "../../shared/utils/hash";
@@ -96,36 +100,78 @@ function mapTeacherToGuruItem(t: typeof teachers.$inferSelect) {
   };
 }
 
-async function getActiveTeacherProfileRow() {
+async function getActiveTeacherProfileRow(c?: Context) {
+  const authUser = c ? getAuthUser(c) : null;
+  if (authUser) {
+    const teacherId = Number(authUser.sub);
+    if (!Number.isNaN(teacherId) && teacherId > 0) {
+      const [byId] = await db.select().from(teachers).where(eq(teachers.id, teacherId)).limit(1);
+      if (byId) return byId;
+    }
+    if (authUser.username) {
+      const [byNipOrEmail] = await db
+        .select()
+        .from(teachers)
+        .where(
+          or(eq(teachers.nip, authUser.username), eq(teachers.email, authUser.username))
+        )
+        .limit(1);
+      if (byNipOrEmail) return byNipOrEmail;
+    }
+  }
   const [rina] = await db.select().from(teachers).where(eq(teachers.id, 5)).limit(1);
   if (rina) return rina;
   const [first] = await db.select().from(teachers).orderBy(asc(teachers.id)).limit(1);
   return first;
 }
 
-function formatTeacherProfile(t?: typeof teachers.$inferSelect) {
-  const isWalas = Boolean(t?.is_walas ?? true);
-  const kelasWalas = t?.kelas_walas ?? "X RPL 1";
+async function formatTeacherProfile(t?: typeof teachers.$inferSelect) {
+  const isWalas = Boolean(t?.is_walas ?? false);
+  const kelasWalas = t?.kelas_walas ?? "";
+  const namaGuru = t?.nama_guru || "";
+
+  let kelasDiajar: string[] = [];
+  if (namaGuru) {
+    const teacherSchedules = await db
+      .select({ kelas: schedules.kelas })
+      .from(schedules)
+      .where(eq(schedules.guru, namaGuru));
+    kelasDiajar = Array.from(new Set(teacherSchedules.map((s) => s.kelas).filter(Boolean)));
+  }
+  if (kelasDiajar.length === 0 && kelasWalas) {
+    kelasDiajar = [kelasWalas];
+  }
+
+  let jumlahSiswa = 0;
+  const targetClass = kelasWalas || kelasDiajar[0] || "";
+  if (targetClass) {
+    const classStudents = await db
+      .select({ id: students.id })
+      .from(students)
+      .where(eq(students.kelas, targetClass));
+    jumlahSiswa = classStudents.length;
+  }
+
   return {
-    id: String(t?.id ?? 5),
-    nip: t?.nip || "198905122015012008",
-    nama_lengkap: t?.nama_guru || "Bu Rina Pratiwi, S.Pd.",
-    nama_panggilan: t?.nama_panggilan || "Bu Rina",
+    id: String(t?.id ?? ""),
+    nip: t?.nip || "",
+    nama_lengkap: namaGuru,
+    nama_panggilan: t?.nama_panggilan || namaGuru.split(",")[0] || "",
     peran: "Guru",
-    email: t?.email || "burina@ghamacaraka.sch.id",
-    telepon: t?.nomor_telepon || "0812-3456-7890",
+    email: t?.email || "",
+    telepon: t?.nomor_telepon || "",
     jenis_kelamin: ((t?.jenis_kelamin === "Laki-laki" ? "Laki-laki" : "Perempuan") as
       | "Laki-laki"
       | "Perempuan"),
-    tempat_lahir: t?.tempat_lahir || "Jakarta",
-    tanggal_lahir: t?.tanggal_lahir || "12 Mei 1989",
-    alamat: t?.alamat || "Depok, Jawa Barat",
-    mata_pelajaran: t?.mata_pelajaran || "Pemrograman Web",
-    kelas_diajar: ["X RPL 1", "XI RPL 1", "XII RPL 1"],
+    tempat_lahir: t?.tempat_lahir || "",
+    tanggal_lahir: t?.tanggal_lahir || "",
+    alamat: t?.alamat || "",
+    mata_pelajaran: t?.mata_pelajaran || "",
+    kelas_diajar: kelasDiajar,
     isWalas,
     kelasWalas,
     kelas_diampu: kelasWalas,
-    jumlah_siswa: 32,
+    jumlah_siswa: jumlahSiswa,
     status_akun: ((t?.status_akun === "Non-Aktif" ? "Non-Aktif" : "Aktif") as
       | "Aktif"
       | "Non-Aktif"),
@@ -309,7 +355,7 @@ guruRouter.openapi(createGuruRoute, async (c) => {
         nama_lengkap: inserted.nama_guru,
         email: inserted.email || "",
         teacher_id: inserted.id,
-        password_hash: hashPassword("guru123"),
+        password_hash: hashPassword(env.STUDENT_DEFAULT_PASSWORD),
         is_active: true,
       })
       .onConflictDoNothing();
@@ -340,8 +386,8 @@ export const getGuruProfileRoute = createRoute({
 });
 
 guruRouter.openapi(getGuruProfileRoute, async (c) => {
-  const row = await getActiveTeacherProfileRow();
-  return c.json(formatTeacherProfile(row), 200);
+  const row = await getActiveTeacherProfileRow(c);
+  return c.json(await formatTeacherProfile(row), 200);
 });
 
 /**
@@ -376,9 +422,9 @@ export const updateGuruProfileRoute = createRoute({
 
 guruRouter.openapi(updateGuruProfileRoute, async (c) => {
   const body = c.req.valid("json");
-  const current = await getActiveTeacherProfileRow();
+  const current = await getActiveTeacherProfileRow(c);
   if (!current) {
-    return c.json(formatTeacherProfile(undefined), 200);
+    return c.json(await formatTeacherProfile(undefined), 200);
   }
 
   const [updated] = await db
@@ -400,7 +446,7 @@ guruRouter.openapi(updateGuruProfileRoute, async (c) => {
     .where(eq(teachers.id, current.id))
     .returning();
 
-  return c.json(formatTeacherProfile(updated), 200);
+  return c.json(await formatTeacherProfile(updated), 200);
 });
 
 /**
@@ -442,10 +488,11 @@ export const getGuruDashboardRoute = createRoute({
 });
 
 guruRouter.openapi(getGuruDashboardRoute, async (c) => {
-  const row = await getActiveTeacherProfileRow();
-  const profile = formatTeacherProfile(row);
+  const row = await getActiveTeacherProfileRow(c);
+  const profile = await formatTeacherProfile(row);
+  const activeClass = profile.kelasWalas || profile.kelas_diajar[0] || "X RPL 1";
   const sessionList = await getOrSeedSubjectSession(
-    profile.kelasWalas || "X RPL 1",
+    activeClass,
     profile.mata_pelajaran,
     "2026-06-06"
   );
@@ -454,25 +501,37 @@ guruRouter.openapi(getGuruDashboardRoute, async (c) => {
   const izin = sessionList.filter((s) => s.status === "Izin").length;
   const sakit = sessionList.filter((s) => s.status === "Sakit").length;
   const alpa = sessionList.filter((s) => s.status === "Alpa").length;
+  const now = new Date();
+  const tanggalSekarang = now.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  const jamSekarang = now.toLocaleTimeString("id-ID", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   return c.json(
     {
       guru: profile,
       kelas_aktif: {
         id: "kls-1",
-        nama_kelas: profile.kelasWalas || "X RPL 1",
-        jurusan: "Rekayasa Perangkat Lunak",
+        nama_kelas: activeClass,
+        jurusan: activeClass.includes("TKJ")
+          ? "Teknik Komputer dan Jaringan"
+          : "Rekayasa Perangkat Lunak",
         mata_pelajaran: profile.mata_pelajaran,
-        tanggal: "19/10/2026",
-        jam: "10:30",
+        tanggal: tanggalSekarang,
+        jam: jamSekarang,
         status: "Aktif",
       },
       rekap: {
-        hadir: hadir || 24,
-        izin: izin || 4,
-        sakit: sakit || 4,
+        hadir,
+        izin,
+        sakit,
         alpa,
-        total: sessionList.length || 32,
+        total: sessionList.length,
       },
     },
     200
