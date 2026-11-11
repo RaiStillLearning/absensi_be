@@ -1,14 +1,60 @@
-# Authentication Endpoints (Placeholder)
+# Authentication Endpoints
 
 > [!NOTE]
-> This document is an architectural placeholder for future authentication endpoints. Implementation details, token specifications, and session management will be added in subsequent milestones.
+> Endpoints autentikasi universal untuk seluruh pengguna sistem: Admin, Guru Mata Pelajaran, Wali Kelas, dan Siswa.
 
 ## Tag: `Authentication`
 
-### Planned Endpoints
+### 1. Unified User Login
+- **Method**: `POST`
+- **Path**: `/api/v1/auth/login`
+- **Request Body**:
+  ```json
+  {
+    "nisn_atau_username": "admin",
+    "kata_sandi": "admin123"
+  }
+  ```
+- **Response (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "message": "Login berhasil",
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "user": {
+      "id": "1",
+      "username": "admin",
+      "role": "admin",
+      "peran": "Administrator",
+      "nama_lengkap": "Admin",
+      "email": "admin@sekolah.example"
+    }
+  }
+  ```
 
-- `POST /api/v1/auth/login` — User authentication and token issuance.
-- `POST /api/v1/auth/refresh` — Refresh access token using valid refresh token.
-- `POST /api/v1/auth/logout` — Invalidate user session.
-- `GET /api/v1/auth/me` — Retrieve authenticated user profile and permissions.
+### 2. Teacher Direct Login
+- **Method**: `POST`
+- **Path**: `/api/v1/auth/guru/login`
+- **Request Body**:
+  ```json
+  {
+    "nip": "198905122015012008",
+    "password": "guru123"
+  }
+  ```
 
+### 3. Student Direct Login
+- **Method**: `POST`
+- **Path**: `/api/v1/auth/siswa/login`
+- **Request Body**:
+  ```json
+  {
+    "nisn": "0102641001",
+    "password": "siswa123"
+  }
+  ```
+
+### 4. Authenticated User Profile
+- **Method**: `GET`
+- **Path**: `/api/v1/auth/me`
+- **Header**: `Authorization: Bearer <token>`

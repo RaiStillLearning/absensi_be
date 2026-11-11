@@ -21,23 +21,23 @@
     },
     {
       "name": "Authentication",
-      "description": "Authentication and session management (Future)"
+      "description": "Authentication and session management for all school roles"
     },
     {
       "name": "Admin",
-      "description": "Administrator operations for master data, users, and school configuration (Future)"
+      "description": "Administrator operations for master data, users, and school configuration"
     },
     {
       "name": "Walas",
-      "description": "Wali Kelas (Homeroom Teacher) attendance oversight and reporting (Future)"
+      "description": "Wali Kelas (Homeroom Teacher) attendance oversight and reporting"
     },
     {
       "name": "Guru",
-      "description": "Guru Mata Pelajaran (Subject Teacher) attendance tracking (Future)"
+      "description": "Guru Mata Pelajaran (Subject Teacher) attendance tracking and sessions"
     },
     {
       "name": "Siswa",
-      "description": "Siswa (Student) attendance check-in and records (Future)"
+      "description": "Siswa (Student) attendance check-in, schedules, and personal records"
     }
   ],
   "components": {
@@ -63,6 +63,12 @@
           },
           "data": {
             "$ref": "#/components/schemas/LoginSuccessData"
+          },
+          "access_token": {
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/AuthUserProfile"
           }
         },
         "required": [
@@ -101,76 +107,80 @@
         "properties": {
           "id": {
             "type": "string",
-            "format": "uuid",
-            "example": "550e8400-e29b-41d4-a716-446655440001"
+            "example": "1"
           },
           "username": {
             "type": "string",
-            "example": "0097061219"
+            "example": "admin"
           },
           "role": {
             "type": "string",
-            "example": "siswa"
+            "example": "admin"
           },
-          "student": {
-            "$ref": "#/components/schemas/StudentBasicInfo"
+          "peran": {
+            "type": "string",
+            "example": "Administrator"
+          },
+          "nama_lengkap": {
+            "type": "string",
+            "example": "Admin"
+          },
+          "email": {
+            "type": "string",
+            "example": "admin@sekolah.example"
+          },
+          "foto_profil": {
+            "type": "string"
+          },
+          "isWalas": {
+            "type": "boolean"
+          },
+          "kelasWalas": {
+            "type": "string"
+          },
+          "mata_pelajaran": {
+            "type": "string"
+          },
+          "nisn": {
+            "type": "string"
+          },
+          "kelas": {
+            "type": "string"
+          },
+          "jurusan": {
+            "type": "string"
           }
         },
         "required": [
           "id",
           "username",
-          "role"
-        ]
-      },
-      "StudentBasicInfo": {
-        "type": "object",
-        "nullable": true,
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "example": "550e8400-e29b-41d4-a716-446655440000"
-          },
-          "nisn": {
-            "type": "string",
-            "example": "0097061219"
-          },
-          "full_name": {
-            "type": "string",
-            "example": "Abdul Hafizh Rijki Tsaqafi"
-          },
-          "class_name": {
-            "type": "string",
-            "example": "KELAS 11"
-          }
-        },
-        "required": [
-          "id",
-          "nisn",
-          "full_name",
-          "class_name"
+          "role",
+          "peran",
+          "nama_lengkap"
         ]
       },
       "LoginRequest": {
         "type": "object",
         "properties": {
+          "nisn_atau_username": {
+            "type": "string"
+          },
           "username": {
-            "type": "string",
-            "minLength": 1,
-            "example": "0097061219",
-            "description": "NISN siswa atau username akun"
+            "type": "string"
+          },
+          "nisn": {
+            "type": "string"
+          },
+          "nip": {
+            "type": "string"
+          },
+          "kata_sandi": {
+            "type": "string"
           },
           "password": {
-            "type": "string",
-            "minLength": 1,
-            "example": "Ghama123!",
-            "description": "Password akun pengguna"
+            "type": "string"
           }
-        },
-        "required": [
-          "username",
-          "password"
-        ]
+        }
       },
       "AuthProfileResponse": {
         "type": "object",
@@ -191,6 +201,865 @@
           "success",
           "message",
           "data"
+        ]
+      },
+      "KelasItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number",
+            "example": 1
+          },
+          "nama_kelas": {
+            "type": "string",
+            "example": "X RPL 1"
+          },
+          "tingkat": {
+            "type": "string",
+            "example": "X"
+          },
+          "jurusan": {
+            "type": "string",
+            "example": "RPL"
+          },
+          "wali_kelas": {
+            "type": "string",
+            "example": "Bu Sari"
+          },
+          "tahun_ajaran": {
+            "type": "string",
+            "example": "2026/2027"
+          }
+        },
+        "required": [
+          "id",
+          "nama_kelas",
+          "tingkat",
+          "jurusan",
+          "wali_kelas"
+        ]
+      },
+      "CreateKelasPayload": {
+        "type": "object",
+        "properties": {
+          "nama_kelas": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tingkat": {
+            "type": "string",
+            "minLength": 1
+          },
+          "jurusan": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tahun_ajaran": {
+            "type": "string",
+            "minLength": 1
+          },
+          "wali_kelas": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "nama_kelas",
+          "tingkat",
+          "jurusan",
+          "tahun_ajaran",
+          "wali_kelas"
+        ]
+      },
+      "UpdateKelasPayload": {
+        "type": "object",
+        "properties": {
+          "nama_kelas": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tingkat": {
+            "type": "string",
+            "minLength": 1
+          },
+          "jurusan": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tahun_ajaran": {
+            "type": "string",
+            "minLength": 1
+          },
+          "wali_kelas": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "GuruItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number",
+            "example": 5
+          },
+          "nama_guru": {
+            "type": "string",
+            "example": "Bu Rina Pratiwi, S.Pd."
+          },
+          "mata_pelajaran": {
+            "type": "string",
+            "example": "Pemrograman Web"
+          },
+          "nip": {
+            "type": "string",
+            "example": "198905122015012008"
+          },
+          "email": {
+            "type": "string",
+            "example": "burina@ghamacaraka.sch.id"
+          },
+          "nomor_telepon": {
+            "type": "string",
+            "example": "0812-3456-7890"
+          },
+          "is_walas": {
+            "type": "boolean",
+            "default": false
+          },
+          "kelas_walas": {
+            "type": "string",
+            "default": ""
+          },
+          "isWalas": {
+            "type": "boolean"
+          },
+          "kelasWalas": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "nama_guru",
+          "mata_pelajaran"
+        ]
+      },
+      "CreateGuruPayload": {
+        "type": "object",
+        "properties": {
+          "nama_guru": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mata_pelajaran": {
+            "type": "string",
+            "minLength": 1
+          },
+          "nip": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "nomor_telepon": {
+            "type": "string"
+          },
+          "is_walas": {
+            "type": "boolean"
+          },
+          "kelas_walas": {
+            "type": "string"
+          },
+          "isWalas": {
+            "type": "boolean"
+          },
+          "kelasWalas": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "nama_guru",
+          "mata_pelajaran"
+        ]
+      },
+      "GuruProfile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "5"
+          },
+          "nip": {
+            "type": "string",
+            "example": "198905122015012008"
+          },
+          "nama_lengkap": {
+            "type": "string",
+            "example": "Bu Rina Pratiwi, S.Pd."
+          },
+          "nama_panggilan": {
+            "type": "string",
+            "example": "Bu Rina"
+          },
+          "peran": {
+            "type": "string",
+            "example": "Guru"
+          },
+          "email": {
+            "type": "string",
+            "example": "burina@ghamacaraka.sch.id"
+          },
+          "telepon": {
+            "type": "string",
+            "example": "0812-3456-7890"
+          },
+          "jenis_kelamin": {
+            "type": "string",
+            "enum": [
+              "Laki-laki",
+              "Perempuan"
+            ],
+            "example": "Perempuan"
+          },
+          "tanggal_lahir": {
+            "type": "string",
+            "example": "12 Mei 1989"
+          },
+          "tempat_lahir": {
+            "type": "string",
+            "example": "Jakarta"
+          },
+          "alamat": {
+            "type": "string",
+            "example": "Depok, Jawa Barat"
+          },
+          "mata_pelajaran": {
+            "type": "string",
+            "example": "Pemrograman Web"
+          },
+          "kelas_diajar": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "X RPL 1",
+              "XI RPL 1",
+              "XII RPL 1"
+            ]
+          },
+          "isWalas": {
+            "type": "boolean",
+            "example": true
+          },
+          "kelasWalas": {
+            "type": "string",
+            "example": "X RPL 1"
+          },
+          "kelas_diampu": {
+            "type": "string",
+            "example": "X RPL 1"
+          },
+          "jumlah_siswa": {
+            "type": "number",
+            "example": 32
+          },
+          "status_akun": {
+            "type": "string",
+            "enum": [
+              "Aktif",
+              "Non-Aktif"
+            ],
+            "example": "Aktif"
+          },
+          "tahun_ajaran": {
+            "type": "string",
+            "example": "2026/2027"
+          },
+          "foto_profil": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "nip",
+          "nama_lengkap",
+          "peran",
+          "email",
+          "telepon",
+          "jenis_kelamin",
+          "alamat",
+          "mata_pelajaran",
+          "kelas_diajar",
+          "isWalas",
+          "kelasWalas",
+          "kelas_diampu",
+          "jumlah_siswa",
+          "status_akun",
+          "tahun_ajaran"
+        ]
+      },
+      "SiswaAbsensiItem": {
+        "type": "object",
+        "properties": {
+          "no": {
+            "type": "number",
+            "example": 1
+          },
+          "id": {
+            "type": "string",
+            "example": "xrpl1-1"
+          },
+          "nama_siswa": {
+            "type": "string",
+            "example": "Ahmad Rizky Pratama"
+          },
+          "nisn": {
+            "type": "string",
+            "example": "1234567891"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "Hadir",
+              "Izin",
+              "Sakit",
+              "Alpa"
+            ],
+            "example": "Hadir"
+          },
+          "catatan": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "no",
+          "id",
+          "nama_siswa",
+          "nisn",
+          "status"
+        ]
+      },
+      "UpdateGuruPayload": {
+        "type": "object",
+        "properties": {
+          "nama_guru": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mata_pelajaran": {
+            "type": "string",
+            "minLength": 1
+          },
+          "nip": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "nomor_telepon": {
+            "type": "string"
+          },
+          "is_walas": {
+            "type": "boolean"
+          },
+          "kelas_walas": {
+            "type": "string"
+          },
+          "isWalas": {
+            "type": "boolean"
+          },
+          "kelasWalas": {
+            "type": "string"
+          }
+        }
+      },
+      "JadwalItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number",
+            "example": 1
+          },
+          "kelas": {
+            "type": "string",
+            "example": "X RPL 1"
+          },
+          "hari": {
+            "type": "string",
+            "example": "Senin"
+          },
+          "jam_ke": {
+            "type": "number",
+            "example": 1
+          },
+          "waktu_mulai": {
+            "type": "string",
+            "example": "07:00"
+          },
+          "waktu_selesai": {
+            "type": "string",
+            "example": "07:45"
+          },
+          "mata_pelajaran": {
+            "type": "string",
+            "example": "Matematika"
+          },
+          "guru": {
+            "type": "string",
+            "example": "Bu Sari"
+          }
+        },
+        "required": [
+          "id",
+          "kelas",
+          "hari",
+          "jam_ke",
+          "waktu_mulai",
+          "waktu_selesai",
+          "mata_pelajaran",
+          "guru"
+        ]
+      },
+      "CreateJadwalPayload": {
+        "type": "object",
+        "properties": {
+          "kelas": {
+            "type": "string",
+            "minLength": 1
+          },
+          "hari": {
+            "type": "string",
+            "minLength": 1
+          },
+          "jam_ke": {
+            "type": "number",
+            "minimum": 1
+          },
+          "waktu_mulai": {
+            "type": "string",
+            "minLength": 1
+          },
+          "waktu_selesai": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mata_pelajaran": {
+            "type": "string",
+            "minLength": 1
+          },
+          "guru": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "kelas",
+          "hari",
+          "jam_ke",
+          "waktu_mulai",
+          "waktu_selesai",
+          "mata_pelajaran",
+          "guru"
+        ]
+      },
+      "UpdateJadwalPayload": {
+        "type": "object",
+        "properties": {
+          "kelas": {
+            "type": "string",
+            "minLength": 1
+          },
+          "hari": {
+            "type": "string",
+            "minLength": 1
+          },
+          "jam_ke": {
+            "type": "number",
+            "minimum": 1
+          },
+          "waktu_mulai": {
+            "type": "string",
+            "minLength": 1
+          },
+          "waktu_selesai": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mata_pelajaran": {
+            "type": "string",
+            "minLength": 1
+          },
+          "guru": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "RingkasanAbsensi": {
+        "type": "object",
+        "properties": {
+          "total_siswa": {
+            "type": "number",
+            "example": 320
+          },
+          "total_kelas": {
+            "type": "number",
+            "example": 12
+          },
+          "tanggal": {
+            "type": "string",
+            "example": "Senin, 19 Oktober 2026"
+          },
+          "hadir": {
+            "type": "number",
+            "example": 301
+          },
+          "izin": {
+            "type": "number",
+            "example": 9
+          },
+          "sakit": {
+            "type": "number",
+            "example": 6
+          },
+          "alpha": {
+            "type": "number",
+            "example": 4
+          }
+        },
+        "required": [
+          "total_siswa",
+          "total_kelas",
+          "tanggal",
+          "hadir",
+          "izin",
+          "sakit",
+          "alpha"
+        ]
+      },
+      "AbsensiItem": {
+        "type": "object",
+        "properties": {
+          "nama_siswa": {
+            "type": "string",
+            "example": "Ahmad Fauzan"
+          },
+          "nisn": {
+            "type": "string",
+            "example": "0102641001"
+          },
+          "kelas": {
+            "type": "string",
+            "example": "X RPL 1"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "Hadir",
+              "Izin",
+              "Sakit",
+              "Alpa",
+              "Alpha"
+            ],
+            "example": "Hadir"
+          },
+          "jam_masuk": {
+            "type": "string",
+            "example": "06.42"
+          },
+          "keterangan": {
+            "type": "string",
+            "example": "Tepat waktu"
+          }
+        },
+        "required": [
+          "nama_siswa",
+          "nisn",
+          "kelas",
+          "status",
+          "jam_masuk",
+          "keterangan"
+        ]
+      },
+      "AdminProfile": {
+        "type": "object",
+        "properties": {
+          "nama_lengkap": {
+            "type": "string",
+            "example": "Admin"
+          },
+          "username": {
+            "type": "string",
+            "example": "admin"
+          },
+          "email": {
+            "type": "string",
+            "example": "admin@sekolah.example"
+          },
+          "peran": {
+            "type": "string",
+            "example": "Administrator"
+          },
+          "foto_profil": {
+            "type": "string",
+            "example": ""
+          }
+        },
+        "required": [
+          "nama_lengkap",
+          "username",
+          "email",
+          "peran"
+        ]
+      },
+      "WalasProfile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "5"
+          },
+          "nip": {
+            "type": "string",
+            "example": "198905122015012008"
+          },
+          "nama_lengkap": {
+            "type": "string",
+            "example": "Bu Rina Pratiwi, S.Pd."
+          },
+          "nama_panggilan": {
+            "type": "string",
+            "example": "Bu Rina"
+          },
+          "peran": {
+            "type": "string",
+            "example": "Guru"
+          },
+          "email": {
+            "type": "string",
+            "example": "burina@ghamacaraka.sch.id"
+          },
+          "telepon": {
+            "type": "string",
+            "example": "0812-3456-7890"
+          },
+          "jenis_kelamin": {
+            "type": "string",
+            "enum": [
+              "Laki-laki",
+              "Perempuan"
+            ],
+            "example": "Perempuan"
+          },
+          "tanggal_lahir": {
+            "type": "string",
+            "example": "12 Mei 1989"
+          },
+          "tempat_lahir": {
+            "type": "string",
+            "example": "Jakarta"
+          },
+          "mata_pelajaran": {
+            "type": "string",
+            "example": "Pemrograman Web"
+          },
+          "alamat": {
+            "type": "string",
+            "example": "Depok, Jawa Barat"
+          },
+          "username": {
+            "type": "string",
+            "example": "burina"
+          },
+          "status_akun": {
+            "type": "string",
+            "enum": [
+              "Aktif",
+              "Non-Aktif"
+            ],
+            "example": "Aktif"
+          },
+          "isWalas": {
+            "type": "boolean",
+            "example": true
+          },
+          "kelasWalas": {
+            "type": "string",
+            "example": "X RPL 1"
+          },
+          "kelas_diampu": {
+            "type": "string",
+            "example": "X RPL 1"
+          },
+          "jumlah_siswa": {
+            "type": "number",
+            "example": 32
+          },
+          "tahun_ajaran": {
+            "type": "string",
+            "example": "2026/2027"
+          },
+          "foto_profil": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "nip",
+          "nama_lengkap",
+          "nama_panggilan",
+          "peran",
+          "email",
+          "telepon",
+          "jenis_kelamin",
+          "tanggal_lahir",
+          "alamat",
+          "username",
+          "status_akun",
+          "isWalas",
+          "kelasWalas",
+          "kelas_diampu",
+          "jumlah_siswa",
+          "tahun_ajaran"
+        ]
+      },
+      "SiswaHarianWalasItem": {
+        "type": "object",
+        "properties": {
+          "no": {
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          },
+          "nis": {
+            "type": "string"
+          },
+          "nisn": {
+            "type": "string"
+          },
+          "nama_siswa": {
+            "type": "string"
+          },
+          "jam_masuk": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "Hadir",
+              "Izin",
+              "Sakit",
+              "Alpa",
+              "Tidak Hadir"
+            ]
+          },
+          "keterangan": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "no",
+          "id",
+          "nis",
+          "nisn",
+          "nama_siswa",
+          "status",
+          "keterangan"
+        ]
+      },
+      "SiswaProfile": {
+        "type": "object",
+        "properties": {
+          "nisn": {
+            "type": "string",
+            "example": "0102641001"
+          },
+          "nis": {
+            "type": "string",
+            "example": "242510001"
+          },
+          "nama_lengkap": {
+            "type": "string",
+            "example": "Ahmad Rizky Pratama"
+          },
+          "kelas": {
+            "type": "string",
+            "example": "X RPL 1"
+          },
+          "jurusan": {
+            "type": "string",
+            "example": "Rekayasa Perangkat Lunak"
+          },
+          "tempat_lahir": {
+            "type": "string",
+            "example": "Depok"
+          },
+          "tanggal_lahir": {
+            "type": "string",
+            "example": "14 Maret 2008"
+          },
+          "jenis_kelamin": {
+            "type": "string",
+            "enum": [
+              "Laki-laki",
+              "Perempuan"
+            ],
+            "example": "Laki-laki"
+          },
+          "agama": {
+            "type": "string",
+            "example": "Islam"
+          },
+          "alamat": {
+            "type": "string",
+            "example": "Jl. H. Caraka No. 12, Cisalak, Depok"
+          },
+          "telepon": {
+            "type": "string",
+            "example": "0812-9876-5432"
+          },
+          "nama_wali": {
+            "type": "string",
+            "example": "Bambang Pratama"
+          },
+          "telepon_wali": {
+            "type": "string",
+            "example": "0813-1122-3344"
+          },
+          "email": {
+            "type": "string",
+            "example": "ahmad.rizky@siswa.ghamacaraka.sch.id"
+          },
+          "status_akun": {
+            "type": "string",
+            "enum": [
+              "Aktif",
+              "Non-Aktif"
+            ],
+            "example": "Aktif"
+          },
+          "foto_profil": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "nisn",
+          "nis",
+          "nama_lengkap",
+          "kelas",
+          "jurusan",
+          "tempat_lahir",
+          "tanggal_lahir",
+          "jenis_kelamin",
+          "agama",
+          "alamat",
+          "telepon",
+          "nama_wali",
+          "telepon_wali",
+          "email",
+          "status_akun"
         ]
       },
       "ScanSuccessResponse": {
@@ -376,8 +1245,8 @@
         "tags": [
           "Authentication"
         ],
-        "summary": "User & Student Login via NISN/Username",
-        "description": "Authenticates student using their NISN and password. Returns signed JWT Bearer access token and safe student profile.",
+        "summary": "Unified Login for Admin, Guru, and Siswa",
+        "description": "Authenticates any school user and returns signed JWT access token and user profile",
         "requestBody": {
           "required": true,
           "content": {
@@ -399,58 +1268,8 @@
               }
             }
           },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": false
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "An error occurred"
-                    },
-                    "errors": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "field": {
-                            "type": "string",
-                            "example": "username"
-                          },
-                          "message": {
-                            "type": "string",
-                            "example": "Field is required"
-                          }
-                        },
-                        "required": [
-                          "field",
-                          "message"
-                        ]
-                      },
-                      "example": [
-                        {
-                          "field": "username",
-                          "message": "Field is required"
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "success",
-                    "message"
-                  ]
-                }
-              }
-            }
-          },
           "401": {
-            "description": "Invalid credentials or unauthorized",
+            "description": "Invalid credentials",
             "content": {
               "application/json": {
                 "schema": {
@@ -500,7 +1319,295 @@
             }
           },
           "403": {
-            "description": "Account deactivated",
+            "description": "Account inactive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/guru/login": {
+      "post": {
+        "tags": [
+          "Authentication",
+          "Guru"
+        ],
+        "summary": "Teacher Direct Login",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nip": {
+                    "type": "string"
+                  },
+                  "nipInput": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "password"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Teacher login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginSuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Account inactive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/siswa/login": {
+      "post": {
+        "tags": [
+          "Authentication",
+          "Siswa"
+        ],
+        "summary": "Student Direct Login",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nisn": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "nisn",
+                  "password"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Student login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginSuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Account inactive",
             "content": {
               "application/json": {
                 "schema": {
@@ -558,7 +1665,6 @@
           "Authentication"
         ],
         "summary": "Get Current Authenticated User Profile",
-        "description": "Retrieves profile and student information for currently authenticated user.",
         "security": [
           {
             "BearerAuth": []
@@ -566,7 +1672,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Profile retrieved successfully",
+            "description": "Profile retrieved",
             "content": {
               "application/json": {
                 "schema": {
@@ -576,7 +1682,7 @@
             }
           },
           "401": {
-            "description": "Missing or invalid Bearer token",
+            "description": "Unauthorized",
             "content": {
               "application/json": {
                 "schema": {
@@ -624,9 +1730,270 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/stats": {
+      "get": {
+        "tags": [
+          "Admin",
+          "General"
+        ],
+        "summary": "Get Dashboard Statistics Summary",
+        "description": "Returns summary counts for students, teachers, classes, and attendance percentage",
+        "responses": {
+          "200": {
+            "description": "Dashboard stats retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total_siswa": {
+                      "type": "number",
+                      "example": 320
+                    },
+                    "total_guru": {
+                      "type": "number",
+                      "example": 28
+                    },
+                    "total_kelas": {
+                      "type": "number",
+                      "example": 12
+                    },
+                    "kehadiran_hari_ini": {
+                      "type": "number",
+                      "example": 94
+                    },
+                    "kenaikan_kehadiran": {
+                      "type": "number",
+                      "example": 2
+                    }
+                  },
+                  "required": [
+                    "total_siswa",
+                    "total_guru",
+                    "total_kelas",
+                    "kehadiran_hari_ini",
+                    "kenaikan_kehadiran"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/rekap-kehadiran": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Get 5-Day Attendance Recap",
+        "description": "Returns 5-day daily attendance chart data (hadir, izin, sakit, alpha)",
+        "responses": {
+          "200": {
+            "description": "Recap data retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "hari": {
+                        "type": "string",
+                        "example": "Senin"
+                      },
+                      "hadir": {
+                        "type": "number",
+                        "example": 301
+                      },
+                      "izin": {
+                        "type": "number",
+                        "example": 9
+                      },
+                      "sakit": {
+                        "type": "number",
+                        "example": 6
+                      },
+                      "alpha": {
+                        "type": "number",
+                        "example": 4
+                      }
+                    },
+                    "required": [
+                      "hari",
+                      "hadir",
+                      "izin",
+                      "sakit",
+                      "alpha"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/aktivitas-terbaru": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Get Recent System Activities",
+        "description": "Returns recent school activity logs",
+        "responses": {
+          "200": {
+            "description": "Activities retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "jenis": {
+                        "type": "string",
+                        "enum": [
+                          "absensi",
+                          "siswa",
+                          "izin",
+                          "jadwal",
+                          "laporan"
+                        ]
+                      },
+                      "judul": {
+                        "type": "string"
+                      },
+                      "deskripsi": {
+                        "type": "string"
+                      },
+                      "waktu": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "jenis",
+                      "judul",
+                      "deskripsi",
+                      "waktu"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/ringkasan-absensi": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Get Today's Attendance Summary",
+        "description": "Returns today's high-level attendance recap for all classes",
+        "responses": {
+          "200": {
+            "description": "Summary retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total_siswa": {
+                      "type": "number"
+                    },
+                    "total_kelas": {
+                      "type": "number"
+                    },
+                    "tanggal": {
+                      "type": "string"
+                    },
+                    "hadir": {
+                      "type": "number"
+                    },
+                    "izin": {
+                      "type": "number"
+                    },
+                    "sakit": {
+                      "type": "number"
+                    },
+                    "alpha": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "total_siswa",
+                    "total_kelas",
+                    "tanggal",
+                    "hadir",
+                    "izin",
+                    "sakit",
+                    "alpha"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/kelas": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "List All School Classes",
+        "description": "Returns master list of all classes in the school",
+        "responses": {
+          "200": {
+            "description": "List of classes retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/KelasItem"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Create New Class",
+        "description": "Creates a new class entry",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateKelasPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Class created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KelasItem"
+                }
+              }
+            }
           },
-          "404": {
-            "description": "User not found",
+          "400": {
+            "description": "Validation error",
             "content": {
               "application/json": {
                 "schema": {
@@ -670,6 +2037,2780 @@
                   "required": [
                     "success",
                     "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/kelas/:id": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Get Class by ID",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true
+            },
+            "required": false,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Class found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KelasItem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Class not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Update Class by ID",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true
+            },
+            "required": false,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateKelasPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Class updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KelasItem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Class not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Delete Class by ID",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true
+            },
+            "required": false,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Class deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Class not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/guru": {
+      "get": {
+        "tags": [
+          "Admin",
+          "Guru"
+        ],
+        "summary": "List All Teachers",
+        "description": "Returns master list of teachers with subject and homeroom class roles",
+        "responses": {
+          "200": {
+            "description": "List of teachers retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GuruItem"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Create New Teacher",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGuruPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Teacher created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuruItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/guru/profil": {
+      "get": {
+        "tags": [
+          "Guru",
+          "Walas"
+        ],
+        "summary": "Get Current Teacher Profile",
+        "description": "Returns profile details for teacher / homeroom teacher",
+        "responses": {
+          "200": {
+            "description": "Teacher profile retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuruProfile"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Guru",
+          "Walas"
+        ],
+        "summary": "Update Current Teacher Profile",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "example": "5"
+                  },
+                  "nip": {
+                    "type": "string",
+                    "example": "198905122015012008"
+                  },
+                  "nama_lengkap": {
+                    "type": "string",
+                    "example": "Bu Rina Pratiwi, S.Pd."
+                  },
+                  "nama_panggilan": {
+                    "type": "string",
+                    "example": "Bu Rina"
+                  },
+                  "peran": {
+                    "type": "string",
+                    "example": "Guru"
+                  },
+                  "email": {
+                    "type": "string",
+                    "example": "burina@ghamacaraka.sch.id"
+                  },
+                  "telepon": {
+                    "type": "string",
+                    "example": "0812-3456-7890"
+                  },
+                  "jenis_kelamin": {
+                    "type": "string",
+                    "enum": [
+                      "Laki-laki",
+                      "Perempuan"
+                    ],
+                    "example": "Perempuan"
+                  },
+                  "tanggal_lahir": {
+                    "type": "string",
+                    "example": "12 Mei 1989"
+                  },
+                  "tempat_lahir": {
+                    "type": "string",
+                    "example": "Jakarta"
+                  },
+                  "alamat": {
+                    "type": "string",
+                    "example": "Depok, Jawa Barat"
+                  },
+                  "mata_pelajaran": {
+                    "type": "string",
+                    "example": "Pemrograman Web"
+                  },
+                  "kelas_diajar": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "X RPL 1",
+                      "XI RPL 1",
+                      "XII RPL 1"
+                    ]
+                  },
+                  "isWalas": {
+                    "type": "boolean",
+                    "example": true
+                  },
+                  "kelasWalas": {
+                    "type": "string",
+                    "example": "X RPL 1"
+                  },
+                  "kelas_diampu": {
+                    "type": "string",
+                    "example": "X RPL 1"
+                  },
+                  "jumlah_siswa": {
+                    "type": "number",
+                    "example": 32
+                  },
+                  "status_akun": {
+                    "type": "string",
+                    "enum": [
+                      "Aktif",
+                      "Non-Aktif"
+                    ],
+                    "example": "Aktif"
+                  },
+                  "tahun_ajaran": {
+                    "type": "string",
+                    "example": "2026/2027"
+                  },
+                  "foto_profil": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Teacher profile updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuruProfile"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/guru/dashboard": {
+      "get": {
+        "tags": [
+          "Guru"
+        ],
+        "summary": "Get Teacher Dashboard Overview",
+        "responses": {
+          "200": {
+            "description": "Teacher dashboard retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "guru": {
+                      "$ref": "#/components/schemas/GuruProfile"
+                    },
+                    "kelas_aktif": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "nama_kelas": {
+                          "type": "string"
+                        },
+                        "jurusan": {
+                          "type": "string"
+                        },
+                        "mata_pelajaran": {
+                          "type": "string"
+                        },
+                        "tanggal": {
+                          "type": "string"
+                        },
+                        "jam": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "nama_kelas",
+                        "jurusan",
+                        "mata_pelajaran",
+                        "tanggal",
+                        "jam",
+                        "status"
+                      ]
+                    },
+                    "rekap": {
+                      "type": "object",
+                      "properties": {
+                        "hadir": {
+                          "type": "number"
+                        },
+                        "izin": {
+                          "type": "number"
+                        },
+                        "sakit": {
+                          "type": "number"
+                        },
+                        "alpa": {
+                          "type": "number"
+                        },
+                        "total": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "hadir",
+                        "izin",
+                        "sakit",
+                        "alpa",
+                        "total"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "guru",
+                    "kelas_aktif",
+                    "rekap"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/guru/absensi": {
+      "get": {
+        "tags": [
+          "Guru"
+        ],
+        "summary": "Get Student Attendance for Class/Subject Session",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "default": "X RPL 1"
+            },
+            "required": false,
+            "name": "kelas",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "default": "Pemrograman Web"
+            },
+            "required": false,
+            "name": "mapel",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "default": "2026-06-06"
+            },
+            "required": false,
+            "name": "tanggal",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Student attendance session list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SiswaAbsensiItem"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/guru/absensi/simpan": {
+      "post": {
+        "tags": [
+          "Guru"
+        ],
+        "summary": "Save Student Attendance for Class/Subject Session",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kelas": {
+                    "type": "string"
+                  },
+                  "mapel": {
+                    "type": "string"
+                  },
+                  "tanggal": {
+                    "type": "string"
+                  },
+                  "siswa": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/SiswaAbsensiItem"
+                    }
+                  }
+                },
+                "required": [
+                  "kelas",
+                  "mapel",
+                  "tanggal",
+                  "siswa"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Attendance session saved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SiswaAbsensiItem"
+                      }
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/guru/absensi/status": {
+      "put": {
+        "tags": [
+          "Guru"
+        ],
+        "summary": "Update Individual Student Attendance Status",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kelas": {
+                    "type": "string"
+                  },
+                  "mapel": {
+                    "type": "string"
+                  },
+                  "tanggal": {
+                    "type": "string"
+                  },
+                  "siswa_id": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "Hadir",
+                      "Izin",
+                      "Sakit",
+                      "Alpa"
+                    ]
+                  }
+                },
+                "required": [
+                  "kelas",
+                  "mapel",
+                  "tanggal",
+                  "siswa_id",
+                  "status"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Student status updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/guru/absensi/:id": {
+      "delete": {
+        "tags": [
+          "Guru"
+        ],
+        "summary": "Remove Student From Subject Attendance Session",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "default": "X RPL 1"
+            },
+            "required": false,
+            "name": "kelas",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "default": "Pemrograman Web"
+            },
+            "required": false,
+            "name": "mapel",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "default": "2026-06-06"
+            },
+            "required": false,
+            "name": "tanggal",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Student removed from session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/guru/rekap": {
+      "get": {
+        "tags": [
+          "Guru"
+        ],
+        "summary": "Get Attendance Recapitulation for Subject Session",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "default": "X RPL 1"
+            },
+            "required": false,
+            "name": "kelas",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "default": "Pemrograman Web"
+            },
+            "required": false,
+            "name": "mapel",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "default": "2026-06-06"
+            },
+            "required": false,
+            "name": "tanggal",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recapitulation report data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "kelas": {
+                      "type": "string"
+                    },
+                    "mata_pelajaran": {
+                      "type": "string"
+                    },
+                    "tanggal": {
+                      "type": "string"
+                    },
+                    "total_siswa": {
+                      "type": "number"
+                    },
+                    "total_hadir": {
+                      "type": "number"
+                    },
+                    "total_izin": {
+                      "type": "number"
+                    },
+                    "total_sakit": {
+                      "type": "number"
+                    },
+                    "total_alfa": {
+                      "type": "number"
+                    },
+                    "persentase_kehadiran": {
+                      "type": "number"
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "no": {
+                            "type": "number"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "nama_siswa": {
+                            "type": "string"
+                          },
+                          "nisn": {
+                            "type": "string"
+                          },
+                          "hadir": {
+                            "type": "number"
+                          },
+                          "izin": {
+                            "type": "number"
+                          },
+                          "sakit": {
+                            "type": "number"
+                          },
+                          "alfa": {
+                            "type": "number"
+                          },
+                          "persentase": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "no",
+                          "id",
+                          "nama_siswa",
+                          "nisn",
+                          "hadir",
+                          "izin",
+                          "sakit",
+                          "alfa",
+                          "persentase"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "kelas",
+                    "mata_pelajaran",
+                    "tanggal",
+                    "total_siswa",
+                    "total_hadir",
+                    "total_izin",
+                    "total_sakit",
+                    "total_alfa",
+                    "persentase_kehadiran",
+                    "rows"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/guru/:id": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Get Teacher by ID",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true
+            },
+            "required": false,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Teacher details retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuruItem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Teacher not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Update Teacher by ID",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true
+            },
+            "required": false,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateGuruPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Teacher updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuruItem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Teacher not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Delete Teacher by ID",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true
+            },
+            "required": false,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Teacher deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Teacher not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jadwal": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "List Schedules with Optional Filters",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "kelas",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "hari",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of schedules",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/JadwalItem"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Create New Lesson Schedule",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateJadwalPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Schedule created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JadwalItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jadwal/:id": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Get Schedule by ID",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true
+            },
+            "required": false,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Schedule found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JadwalItem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Schedule not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Update Schedule by ID",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true
+            },
+            "required": false,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateJadwalPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Schedule updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JadwalItem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Schedule not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Delete Schedule by ID",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true
+            },
+            "required": false,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Schedule deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Schedule not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/absensi": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Get School-wide Attendance Monitoring Records",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "tanggal",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "kelas",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "cari_siswa",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true
+            },
+            "required": false,
+            "name": "halaman",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true
+            },
+            "required": false,
+            "name": "jumlah_per_halaman",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Attendance records and summary retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ringkasan": {
+                      "$ref": "#/components/schemas/RingkasanAbsensi"
+                    },
+                    "absensi": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AbsensiItem"
+                      }
+                    }
+                  },
+                  "required": [
+                    "ringkasan",
+                    "absensi"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/profil": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Get Administrator Profile",
+        "responses": {
+          "200": {
+            "description": "Admin profile retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminProfile"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Update Administrator Profile",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nama_lengkap": {
+                    "type": "string",
+                    "example": "Admin"
+                  },
+                  "username": {
+                    "type": "string",
+                    "example": "admin"
+                  },
+                  "email": {
+                    "type": "string",
+                    "example": "admin@sekolah.example"
+                  },
+                  "peran": {
+                    "type": "string",
+                    "example": "Administrator"
+                  },
+                  "foto_profil": {
+                    "type": "string",
+                    "example": ""
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Admin profile updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminProfile"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/walas/dashboard": {
+      "get": {
+        "tags": [
+          "Walas"
+        ],
+        "summary": "Get Homeroom Teacher Dashboard",
+        "responses": {
+          "200": {
+            "description": "Homeroom dashboard retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "profile": {
+                      "$ref": "#/components/schemas/WalasProfile"
+                    },
+                    "rekap": {
+                      "type": "object",
+                      "properties": {
+                        "hadir": {
+                          "type": "number"
+                        },
+                        "izin": {
+                          "type": "number"
+                        },
+                        "sakit": {
+                          "type": "number"
+                        },
+                        "alfa": {
+                          "type": "number"
+                        },
+                        "total_siswa": {
+                          "type": "number"
+                        },
+                        "persentase": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "hadir",
+                        "izin",
+                        "sakit",
+                        "alfa",
+                        "total_siswa",
+                        "persentase"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "rekap"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/walas/monitoring": {
+      "get": {
+        "tags": [
+          "Walas"
+        ],
+        "summary": "Get Homeroom Daily Class Attendance Monitoring",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "default": "2026-06-05"
+            },
+            "required": false,
+            "name": "tanggal",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "default": "Semua"
+            },
+            "required": false,
+            "name": "status",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "cari",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Monitoring list and stats",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tanggal": {
+                      "type": "string"
+                    },
+                    "siswa": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SiswaHarianWalasItem"
+                      }
+                    },
+                    "statistik": {
+                      "type": "object",
+                      "properties": {
+                        "total": {
+                          "type": "number"
+                        },
+                        "hadir": {
+                          "type": "number"
+                        },
+                        "izin": {
+                          "type": "number"
+                        },
+                        "sakit": {
+                          "type": "number"
+                        },
+                        "alpa": {
+                          "type": "number"
+                        },
+                        "persentase": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "total",
+                        "hadir",
+                        "izin",
+                        "sakit",
+                        "alpa",
+                        "persentase"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "tanggal",
+                    "siswa",
+                    "statistik"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/walas/monitoring/siswa/:id": {
+      "put": {
+        "tags": [
+          "Walas"
+        ],
+        "summary": "Update Homeroom Student Daily Attendance Status",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "Hadir",
+                      "Izin",
+                      "Sakit",
+                      "Alpa",
+                      "Tidak Hadir"
+                    ]
+                  },
+                  "keterangan": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Student status updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/SiswaHarianWalasItem"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Student not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Walas"
+        ],
+        "summary": "Remove Student from Daily Homeroom Attendance",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Student removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/walas/rekap/bulan-ini": {
+      "get": {
+        "tags": [
+          "Walas"
+        ],
+        "summary": "Get Monthly Attendance Recap for Homeroom Class",
+        "responses": {
+          "200": {
+            "description": "Monthly recap data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "rekap": {
+                      "type": "object",
+                      "properties": {
+                        "hadir": {
+                          "type": "number"
+                        },
+                        "izin": {
+                          "type": "number"
+                        },
+                        "sakit": {
+                          "type": "number"
+                        },
+                        "alfa": {
+                          "type": "number"
+                        },
+                        "total_siswa": {
+                          "type": "number"
+                        },
+                        "persentase": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "hadir",
+                        "izin",
+                        "sakit",
+                        "alfa",
+                        "total_siswa",
+                        "persentase"
+                      ]
+                    },
+                    "siswa_list": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "no": {
+                            "type": "number"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "nisn": {
+                            "type": "string"
+                          },
+                          "nama_siswa": {
+                            "type": "string"
+                          },
+                          "hadir": {
+                            "type": "number"
+                          },
+                          "izin": {
+                            "type": "number"
+                          },
+                          "sakit": {
+                            "type": "number"
+                          },
+                          "alpa": {
+                            "type": "number"
+                          },
+                          "persentase": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "no",
+                          "id",
+                          "nisn",
+                          "nama_siswa",
+                          "hadir",
+                          "izin",
+                          "sakit",
+                          "alpa",
+                          "persentase"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "rekap",
+                    "siswa_list"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/walas/absensi/simpan": {
+      "post": {
+        "tags": [
+          "Walas"
+        ],
+        "summary": "Save Homeroom Daily Attendance Session",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kelas": {
+                    "type": "string"
+                  },
+                  "tanggal": {
+                    "type": "string"
+                  },
+                  "siswa": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/SiswaHarianWalasItem"
+                    }
+                  }
+                },
+                "required": [
+                  "kelas",
+                  "tanggal",
+                  "siswa"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Homeroom attendance saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/siswa/profil": {
+      "get": {
+        "tags": [
+          "Siswa"
+        ],
+        "summary": "Get Current Student Profile",
+        "responses": {
+          "200": {
+            "description": "Student profile retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiswaProfile"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Siswa"
+        ],
+        "summary": "Update Current Student Profile",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nisn": {
+                    "type": "string",
+                    "example": "0102641001"
+                  },
+                  "nis": {
+                    "type": "string",
+                    "example": "242510001"
+                  },
+                  "nama_lengkap": {
+                    "type": "string",
+                    "example": "Ahmad Rizky Pratama"
+                  },
+                  "kelas": {
+                    "type": "string",
+                    "example": "X RPL 1"
+                  },
+                  "jurusan": {
+                    "type": "string",
+                    "example": "Rekayasa Perangkat Lunak"
+                  },
+                  "tempat_lahir": {
+                    "type": "string",
+                    "example": "Depok"
+                  },
+                  "tanggal_lahir": {
+                    "type": "string",
+                    "example": "14 Maret 2008"
+                  },
+                  "jenis_kelamin": {
+                    "type": "string",
+                    "enum": [
+                      "Laki-laki",
+                      "Perempuan"
+                    ],
+                    "example": "Laki-laki"
+                  },
+                  "agama": {
+                    "type": "string",
+                    "example": "Islam"
+                  },
+                  "alamat": {
+                    "type": "string",
+                    "example": "Jl. H. Caraka No. 12, Cisalak, Depok"
+                  },
+                  "telepon": {
+                    "type": "string",
+                    "example": "0812-9876-5432"
+                  },
+                  "nama_wali": {
+                    "type": "string",
+                    "example": "Bambang Pratama"
+                  },
+                  "telepon_wali": {
+                    "type": "string",
+                    "example": "0813-1122-3344"
+                  },
+                  "email": {
+                    "type": "string",
+                    "example": "ahmad.rizky@siswa.ghamacaraka.sch.id"
+                  },
+                  "status_akun": {
+                    "type": "string",
+                    "enum": [
+                      "Aktif",
+                      "Non-Aktif"
+                    ],
+                    "example": "Aktif"
+                  },
+                  "foto_profil": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Student profile updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiswaProfile"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/siswa/metrik-kehadiran": {
+      "get": {
+        "tags": [
+          "Siswa"
+        ],
+        "summary": "Get Student Attendance Summary Metrics",
+        "responses": {
+          "200": {
+            "description": "Student attendance metrics retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "persentase": {
+                      "type": "number",
+                      "example": 92
+                    },
+                    "hadir": {
+                      "type": "number",
+                      "example": 180
+                    },
+                    "izin": {
+                      "type": "number",
+                      "example": 10
+                    },
+                    "sakit": {
+                      "type": "number",
+                      "example": 5
+                    },
+                    "alpa": {
+                      "type": "number",
+                      "example": 2
+                    },
+                    "total_hari": {
+                      "type": "number",
+                      "example": 197
+                    }
+                  },
+                  "required": [
+                    "persentase",
+                    "hadir",
+                    "izin",
+                    "sakit",
+                    "alpa",
+                    "total_hari"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/siswa/jadwal/hari-ini": {
+      "get": {
+        "tags": [
+          "Siswa"
+        ],
+        "summary": "Get Today's Lessons for Student",
+        "responses": {
+          "200": {
+            "description": "Today's lessons",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "jam": {
+                        "type": "string"
+                      },
+                      "mata_pelajaran": {
+                        "type": "string"
+                      },
+                      "guru": {
+                        "type": "string"
+                      },
+                      "kelas": {
+                        "type": "string"
+                      },
+                      "ruang": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "jam",
+                      "mata_pelajaran",
+                      "guru",
+                      "kelas"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/siswa/jadwal/mingguan": {
+      "get": {
+        "tags": [
+          "Siswa"
+        ],
+        "summary": "Get Complete Weekly Schedule (Monday - Friday)",
+        "responses": {
+          "200": {
+            "description": "Weekly schedule retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "hari": {
+                        "type": "string"
+                      },
+                      "tanggal": {
+                        "type": "string"
+                      },
+                      "isToday": {
+                        "type": "boolean"
+                      },
+                      "pelajaran": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "no": {
+                              "type": "number"
+                            },
+                            "jam": {
+                              "type": "string"
+                            },
+                            "mata_pelajaran": {
+                              "type": "string"
+                            },
+                            "guru": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "no",
+                            "jam",
+                            "mata_pelajaran",
+                            "guru"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "hari",
+                      "tanggal",
+                      "pelajaran"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/siswa/absensi/realtime": {
+      "get": {
+        "tags": [
+          "Siswa"
+        ],
+        "summary": "Get Realtime Student Attendance Check-in Status",
+        "responses": {
+          "200": {
+            "description": "Realtime attendance status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status_tercatat": {
+                      "type": "boolean"
+                    },
+                    "jenis": {
+                      "type": "string"
+                    },
+                    "kategori": {
+                      "type": "string"
+                    },
+                    "waktu": {
+                      "type": "string"
+                    },
+                    "tanggal": {
+                      "type": "string"
+                    },
+                    "pesan": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status_tercatat",
+                    "jenis",
+                    "kategori",
+                    "waktu",
+                    "tanggal",
+                    "pesan"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/siswa/kehadiran": {
+      "get": {
+        "tags": [
+          "Siswa"
+        ],
+        "summary": "Get Student Attendance History Records",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "tanggal",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Attendance history records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "tanggal": {
+                        "type": "string"
+                      },
+                      "jam": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "keterangan": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "tanggal",
+                      "jam",
+                      "status",
+                      "keterangan"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/siswa/kehadiran/rekap": {
+      "get": {
+        "tags": [
+          "Siswa"
+        ],
+        "summary": "Get Student Monthly Attendance Recapitulation & Breakdown",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "default": "2025-01"
+            },
+            "required": false,
+            "name": "bulan",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Monthly recap and breakdown retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bulanKey": {
+                      "type": "string"
+                    },
+                    "labelBulan": {
+                      "type": "string"
+                    },
+                    "hadir": {
+                      "type": "number"
+                    },
+                    "izin": {
+                      "type": "number"
+                    },
+                    "sakit": {
+                      "type": "number"
+                    },
+                    "alpa": {
+                      "type": "number"
+                    },
+                    "totalPencatatan": {
+                      "type": "number"
+                    },
+                    "persentaseHadir": {
+                      "type": "number"
+                    },
+                    "breakdown": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          },
+                          "pct": {
+                            "type": "number"
+                          },
+                          "color": {
+                            "type": "string"
+                          },
+                          "dotColor": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "label",
+                          "count",
+                          "pct",
+                          "color",
+                          "dotColor"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "bulanKey",
+                    "labelBulan",
+                    "hadir",
+                    "izin",
+                    "sakit",
+                    "alpa",
+                    "totalPencatatan",
+                    "persentaseHadir",
+                    "breakdown"
                   ]
                 }
               }

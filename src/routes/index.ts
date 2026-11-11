@@ -1,7 +1,16 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { attendance_router } from "../modules/attendance/attendance_route";
 import { authRouter } from "../modules/auth/auth_route";
+import { dashboardRouter } from "../modules/dashboard/dashboard_route";
+import { kelasRouter } from "../modules/kelas/kelas_route";
+import { guruRouter } from "../modules/guru/guru_route";
+import { jadwalRouter } from "../modules/jadwal/jadwal_route";
+import { absensiAdminRouter } from "../modules/absensi/absensi_admin_route";
+import { adminRouter } from "../modules/admin/admin_route";
+import { walasRouter } from "../modules/walas/walas_route";
+import { siswaRouter } from "../modules/siswa/siswa_route";
 import { API_TAGS, APP_CONSTANTS } from "../shared/constants";
+import { requireAuth } from "../middlewares/auth";
 
 /**
  * Health Check Route Specification
@@ -78,9 +87,39 @@ apiV1Router.openapi(apiV1RootRoute, (c) => {
   );
 });
 
-// Mount Auth domain routes (/api/v1/auth)
+// Authentication & Role-Based Access Control Middlewares
+apiV1Router.use("/dashboard", requireAuth(["admin", "guru", "walas"]));
+apiV1Router.use("/dashboard/*", requireAuth(["admin", "guru", "walas"]));
+
+apiV1Router.use("/kelas", requireAuth(["admin"]));
+apiV1Router.use("/kelas/*", requireAuth(["admin"]));
+
+apiV1Router.use("/admin", requireAuth(["admin"]));
+apiV1Router.use("/admin/*", requireAuth(["admin"]));
+
+apiV1Router.use("/guru", requireAuth(["admin", "guru", "walas"]));
+apiV1Router.use("/guru/*", requireAuth(["admin", "guru", "walas"]));
+
+apiV1Router.use("/walas", requireAuth(["admin", "guru", "walas"]));
+apiV1Router.use("/walas/*", requireAuth(["admin", "guru", "walas"]));
+
+apiV1Router.use("/jadwal", requireAuth(["admin", "guru", "walas", "siswa"]));
+apiV1Router.use("/jadwal/*", requireAuth(["admin", "guru", "walas", "siswa"]));
+
+apiV1Router.use("/absensi", requireAuth(["admin", "guru", "walas"]));
+apiV1Router.use("/absensi/*", requireAuth(["admin", "guru", "walas"]));
+
+apiV1Router.use("/siswa", requireAuth(["admin", "guru", "walas", "siswa"]));
+apiV1Router.use("/siswa/*", requireAuth(["admin", "guru", "walas", "siswa"]));
+
+// Mount All Domain Routers
 apiV1Router.route("/auth", authRouter);
-
-// Mount Attendance domain routes
+apiV1Router.route("/dashboard", dashboardRouter);
+apiV1Router.route("/kelas", kelasRouter);
+apiV1Router.route("/guru", guruRouter);
+apiV1Router.route("/jadwal", jadwalRouter);
+apiV1Router.route("/absensi", absensiAdminRouter);
+apiV1Router.route("/admin", adminRouter);
+apiV1Router.route("/walas", walasRouter);
+apiV1Router.route("/siswa", siswaRouter);
 apiV1Router.route("/", attendance_router);
-

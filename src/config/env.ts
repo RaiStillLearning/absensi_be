@@ -1,13 +1,21 @@
 import { z } from "zod";
 
+if (typeof process.loadEnvFile === "function") {
+  try {
+    process.loadEnvFile();
+  } catch {
+    // ignore if .env file is not found
+  }
+}
+
 const envSchema = z.object({
   APP_PORT: z.coerce.number().int().positive().default(3000),
   APP_ENV: z.enum(["development", "test", "production"]).default("development"),
-  DATABASE_URL: z.string().url("DATABASE_URL must be a valid PostgreSQL connection URL"),
+  DATABASE_URL: z.string().default("postgresql://absensi_user:change_me@localhost:5432/absensi_db"),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
-  POSTGRES_USER: z.string().min(1, "POSTGRES_USER is required"),
-  POSTGRES_PASSWORD: z.string().min(1, "POSTGRES_PASSWORD is required"),
-  POSTGRES_DB: z.string().min(1, "POSTGRES_DB is required"),
+  POSTGRES_USER: z.string().default("absensi_user"),
+  POSTGRES_PASSWORD: z.string().default("change_me"),
+  POSTGRES_DB: z.string().default("absensi_db"),
   POSTGRES_PORT: z.coerce.number().int().positive().default(5432),
   JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 characters").default("ghama_caraka_secure_jwt_secret_key_2026"),
   STUDENT_DEFAULT_PASSWORD: z.string().min(6).default("Ghama123!"),
@@ -31,4 +39,3 @@ function loadEnv(): Env {
 }
 
 export const env = loadEnv();
-

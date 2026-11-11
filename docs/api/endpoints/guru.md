@@ -1,18 +1,20 @@
-# Guru Mata Pelajaran (Subject Teacher) Endpoints (Placeholder)
+# Guru Mata Pelajaran (Subject Teacher) Endpoints
 
 > [!NOTE]
-> This document is an architectural placeholder for future subject teacher (Guru) endpoints. Detailed endpoint specifications will be defined during the teaching module milestone.
+> Endpoints untuk Guru Mata Pelajaran mengelola sesi absensi jam pelajaran, profil guru, dashboard, dan laporan rekapitulasi.
 
 ## Tag: `Guru`
 
-### Role Responsibility
+### Dashboard & Profil
+- `GET /api/v1/guru/dashboard`: Ringkasan dashboard guru (profil, kelas aktif mengajar, rekap kehadiran bulanan).
+- `GET /api/v1/guru/profil`: Mengambil profil guru yang sedang aktif.
+- `PUT /api/v1/guru/profil`: Memperbarui profil guru (nama, email, no HP, alamat, foto profil).
 
-Teachers verify student presence during their specific teaching schedules, log period attendance, and flag absences or late arrivals during class hours.
+### Sesi Presensi Pelajaran
+- `GET /api/v1/guru/absensi?kelas=...&mapel=...&tanggal=...`: Mengambil daftar siswa pada sesi presensi tertentu.
+- `POST /api/v1/guru/absensi/simpan`: Menyimpan hasil presensi seluruh siswa untuk satu sesi.
+- `PUT /api/v1/guru/absensi/status`: Mengubah status kehadiran satu siswa (`Hadir`, `Izin`, `Sakit`, `Alpa`).
+- `DELETE /api/v1/guru/absensi/:id?kelas=...&mapel=...&tanggal=...`: Menghapus siswa dari sesi presensi.
 
-### Planned Resource Areas
-
-- Teacher Teaching Schedule: `/api/v1/guru/schedules`
-- Subject Period Attendance: `/api/v1/guru/attendance/sessions`
-- Student Presence Verification: `/api/v1/guru/attendance/verify`
-- Teaching Log / Notes: `/api/v1/guru/attendance/journal`
-
+### Rekapitulasi Presensi Sesi
+- `GET /api/v1/guru/rekap?kelas=...&mapel=...&tanggal=...`: Rekapitulasi data presensi dan tabel siswa untuk ekspor laporan / cetak PDF.

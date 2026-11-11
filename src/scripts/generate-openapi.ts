@@ -1,4 +1,5 @@
-import { join } from "node:path";
+import { writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { app } from "../app";
 import { APP_CONSTANTS } from "../shared/constants";
 
@@ -12,9 +13,9 @@ async function generateOpenApiJson() {
   }
 
   const spec = await res.json();
-  const targetPath = join(process.cwd(), "docs", "api", "openapi.json");
+  const targetPath = fileURLToPath(new URL("../../docs/api/openapi.json", import.meta.url));
 
-  await Bun.write(targetPath, JSON.stringify(spec, null, 2) + "\n");
+  await writeFile(targetPath, JSON.stringify(spec, null, 2) + "\n", "utf-8");
   console.log(`✅ OpenAPI specification successfully written to ${targetPath}`);
 }
 
@@ -22,4 +23,3 @@ generateOpenApiJson().catch((err) => {
   console.error("❌ Failed to generate OpenAPI specification:", err);
   process.exit(1);
 });
-

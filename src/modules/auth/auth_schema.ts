@@ -1,49 +1,50 @@
 import { z } from "@hono/zod-openapi";
 
 /**
- * Login Request Schema
- * NISN or username used as identity.
+ * Universal Login Request Schema
+ * Supports various field naming conventions from frontend:
+ * - `nisn_atau_username` & `kata_sandi` (from lib/api/index.ts)
+ * - `username` & `password` (standard REST)
+ * - `nisn` & `password` (from student auth)
+ * - `nip` & `password` (from teacher auth)
  */
 export const LoginRequestSchema = z
   .object({
-    username: z
-      .string()
-      .min(1, "NISN / Username tidak boleh kosong")
-      .openapi({
-        example: "0097061219",
-        description: "NISN siswa atau username akun",
-      }),
-    password: z
-      .string()
-      .min(1, "Password tidak boleh kosong")
-      .openapi({
-        example: "Ghama123!",
-        description: "Password akun pengguna",
-      }),
+    nisn_atau_username: z.string().optional(),
+    username: z.string().optional(),
+    nisn: z.string().optional(),
+    nip: z.string().optional(),
+    kata_sandi: z.string().optional(),
+    password: z.string().optional(),
   })
+  .refine(
+    (data) => Boolean(data.nisn_atau_username || data.username || data.nisn || data.nip),
+    { message: "NISN, NIP, atau Username wajib diisi" }
+  )
+  .refine(
+    (data) => Boolean(data.kata_sandi || data.password),
+    { message: "Password / Kata Sandi wajib diisi" }
+  )
   .openapi("LoginRequest");
 
 /**
- * Student Basic Info Schema
- */
-export const StudentBasicSchema = z
-  .object({
-    id: z.string().uuid().openapi({ example: "550e8400-e29b-41d4-a716-446655440000" }),
-    nisn: z.string().openapi({ example: "0097061219" }),
-    full_name: z.string().openapi({ example: "Abdul Hafizh Rijki Tsaqafi" }),
-    class_name: z.string().openapi({ example: "KELAS 11" }),
-  })
-  .openapi("StudentBasicInfo");
-
-/**
- * Authenticated User Profile Schema
+ * Authenticated User Details Schema
  */
 export const AuthUserProfileSchema = z
   .object({
-    id: z.string().uuid().openapi({ example: "550e8400-e29b-41d4-a716-446655440001" }),
-    username: z.string().openapi({ example: "0097061219" }),
-    role: z.string().openapi({ example: "siswa" }),
-    student: StudentBasicSchema.nullable().optional(),
+    id: z.string().openapi({ example: "1" }),
+    username: z.string().openapi({ example: "admin" }),
+    role: z.string().openapi({ example: "admin" }),
+    peran: z.string().openapi({ example: "Administrator" }),
+    nama_lengkap: z.string().openapi({ example: "Admin" }),
+    email: z.string().optional().openapi({ example: "admin@sekolah.example" }),
+    foto_profil: z.string().optional(),
+    isWalas: z.boolean().optional(),
+    kelasWalas: z.string().optional(),
+    mata_pelajaran: z.string().optional(),
+    nisn: z.string().optional(),
+    kelas: z.string().optional(),
+    jurusan: z.string().optional(),
   })
   .openapi("AuthUserProfile");
 
@@ -69,6 +70,8 @@ export const LoginSuccessResponseSchema = z
     success: z.boolean().openapi({ example: true }),
     message: z.string().openapi({ example: "Login berhasil" }),
     data: LoginSuccessDataSchema,
+    access_token: z.string().optional(),
+    user: AuthUserProfileSchema.optional(),
   })
   .openapi("LoginSuccessResponse");
 
@@ -82,4 +85,3 @@ export const AuthProfileResponseSchema = z
     data: AuthUserProfileSchema,
   })
   .openapi("AuthProfileResponse");
-

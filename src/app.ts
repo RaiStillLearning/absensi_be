@@ -2,6 +2,7 @@ import { swaggerUI } from "@hono/swagger-ui";
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import { trimTrailingSlash } from "hono/trailing-slash";
 import { env } from "./config/env";
 import { errorHandler, notFoundHandler } from "./middlewares/error-handler";
 import { dev_scanner_router } from "./modules/dev/scanner_test_route";
@@ -30,6 +31,7 @@ export const app = new OpenAPIHono({
 });
 
 // Global Middlewares
+app.use("*", trimTrailingSlash());
 app.use("*", logger());
 
 // Configure CORS for frontend client
@@ -104,23 +106,23 @@ app.doc(APP_CONSTANTS.OPENAPI_JSON_PATH, {
     },
     {
       name: API_TAGS.AUTHENTICATION,
-      description: "Authentication and session management (Future)",
+      description: "Authentication and session management for all school roles",
     },
     {
       name: API_TAGS.ADMIN,
-      description: "Administrator operations for master data, users, and school configuration (Future)",
+      description: "Administrator operations for master data, users, and school configuration",
     },
     {
       name: API_TAGS.WALAS,
-      description: "Wali Kelas (Homeroom Teacher) attendance oversight and reporting (Future)",
+      description: "Wali Kelas (Homeroom Teacher) attendance oversight and reporting",
     },
     {
       name: API_TAGS.GURU,
-      description: "Guru Mata Pelajaran (Subject Teacher) attendance tracking (Future)",
+      description: "Guru Mata Pelajaran (Subject Teacher) attendance tracking and sessions",
     },
     {
       name: API_TAGS.SISWA,
-      description: "Siswa (Student) attendance check-in and records (Future)",
+      description: "Siswa (Student) attendance check-in, schedules, and personal records",
     },
   ],
 });

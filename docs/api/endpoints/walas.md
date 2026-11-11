@@ -1,18 +1,18 @@
-# Wali Kelas (Homeroom Teacher) Endpoints (Placeholder)
+# Wali Kelas (Homeroom Teacher) Endpoints
 
 > [!NOTE]
-> This document is an architectural placeholder for future homeroom teacher (Wali Kelas) endpoints. Detailed request/response contracts will be defined during the walas module milestone.
+> Endpoints untuk Wali Kelas memantau absensi harian kelas binaan, mengelola status kehadiran siswa, dan melihat rekap bulanan.
 
 ## Tag: `Walas`
 
-### Role Responsibility
+### Dashboard
+- `GET /api/v1/walas/dashboard`: Ringkasan profil wali kelas dan statistik kehadiran kelas bulan ini.
 
-Wali Kelas oversees daily attendance of students within their assigned classroom, reviews absence excuses (sakit, izin), and generates class attendance summaries.
+### Monitoring Harian Kelas Binaan
+- `GET /api/v1/walas/monitoring?tanggal=...&status=...&cari=...`: Daftar presensi harian siswa di kelas binaan beserta metrik ringkasan.
+- `PUT /api/v1/walas/monitoring/siswa/:id`: Mengubah status kehadiran siswa harian dan catatan keterangan.
+- `DELETE /api/v1/walas/monitoring/siswa/:id`: Menghapus data kehadiran siswa dari pemantauan harian.
 
-### Planned Resource Areas
-
-- Assigned Class Overview: `/api/v1/walas/class`
-- Daily Classroom Attendance Summary: `/api/v1/walas/attendance/daily`
-- Student Excuse & Leave Approval: `/api/v1/walas/dispensations`
-- Monthly Class Recapitulation: `/api/v1/walas/reports`
-
+### Rekapitulasi & Sesi
+- `GET /api/v1/walas/rekap/bulan-ini`: Rekapitulasi kehadiran bulanan kelas dan persentase kehadiran per siswa.
+- `POST /api/v1/walas/absensi/simpan`: Menyimpan hasil presensi harian kelas.
