@@ -32,4 +32,5 @@ async function startServer() {
 
 startServer();
 
-export default app;
+// Export named `app` rather than default export so Bun doesn't auto-start a second server.
+export { app };
