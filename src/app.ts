@@ -3,6 +3,7 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { trimTrailingSlash } from "hono/trailing-slash";
+import { ensureDatabaseInitialized } from "./config/database";
 import { env } from "./config/env";
 import { errorHandler, notFoundHandler } from "./middlewares/error-handler";
 import { dev_scanner_router } from "./modules/dev/scanner_test_route";
@@ -33,6 +34,10 @@ export const app = new OpenAPIHono({
 // Global Middlewares
 app.use("*", trimTrailingSlash());
 app.use("*", logger());
+app.use("*", async (_c, next) => {
+  await ensureDatabaseInitialized();
+  await next();
+});
 
 // Configure CORS for frontend client
 const allowedOrigins = env.CORS_ORIGIN.split(",").map((o) => o.trim());

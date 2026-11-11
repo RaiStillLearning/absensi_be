@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { closeDatabaseConnection, db } from "../config/database";
+import { closeDatabaseConnection, db, ensureDatabaseInitialized } from "../config/database";
 import {
   classes,
   class_students,
@@ -15,6 +15,7 @@ import { initialSiswaPerKelas, initialSiswaProfile } from "../shared/data/initia
 
 export async function seedAll() {
   console.log("🌱 Memulai seeding data PostgreSQL...");
+  await ensureDatabaseInitialized();
 
   // 1. Seed Users (Admin, Walas, Guru, Siswa Demo)
   const defaultAccounts = [

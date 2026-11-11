@@ -1,10 +1,12 @@
 import { app } from "./app";
+import { ensureDatabaseInitialized } from "./config/database";
 import { env } from "./config/env";
 import { APP_CONSTANTS } from "./shared/constants";
 
 const port = env.APP_PORT;
 
 async function startServer() {
+  await ensureDatabaseInitialized();
   if (typeof (globalThis as any).Bun !== "undefined") {
     (globalThis as any).Bun.serve({
       port,

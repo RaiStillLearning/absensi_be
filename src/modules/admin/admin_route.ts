@@ -1,6 +1,8 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
+import { eq } from "drizzle-orm";
+import { db } from "../../config/database";
+import { users } from "../../config/schema";
 import { API_TAGS } from "../../shared/constants";
-import { store } from "../../shared/data/store";
 
 export const adminRouter = new OpenAPIHono();
 
@@ -34,8 +36,18 @@ export const getAdminProfileRoute = createRoute({
   },
 });
 
-adminRouter.openapi(getAdminProfileRoute, (c) => {
-  return c.json(store.adminProfile, 200);
+adminRouter.openapi(getAdminProfileRoute, async (c) => {
+  const [adminUser] = await db.select().from(users).where(eq(users.role, "admin")).limit(1);
+  return c.json(
+    {
+      nama_lengkap: adminUser?.nama_lengkap || "Admin",
+      username: adminUser?.username || "admin",
+      email: adminUser?.email || "admin@sekolah.example",
+      peran: "Administrator",
+      foto_profil: adminUser?.foto_profil || "",
+    },
+    200
+  );
 });
 
 /**
@@ -70,11 +82,41 @@ export const updateAdminProfileRoute = createRoute({
 
 adminRouter.openapi(updateAdminProfileRoute, async (c) => {
   const body = c.req.valid("json");
-  store.adminProfile = {
-    ...store.adminProfile,
-    ...body,
-  };
-  store.persist();
-  return c.json(store.adminProfile, 200);
-});
+  const [adminUser] = await db.select().from(users).where(eq(users.role, "admin")).limit(1);
 
+  if (adminUser) {
+    const [updated] = await db
+      .update(users)
+      .set({
+        nama_lengkap: body.nama_lengkap ?? adminUser.nama_lengkap,
+        username: body.username ?? adminUser.username,
+        email: body.email ?? adminUser.email,
+        foto_profil: body.foto_profil ?? adminUser.foto_profil,
+        updated_at: new Date(),
+      })
+      .where(eq(users.id, adminUser.id))
+      .returning();
+
+    return c.json(
+      {
+        nama_lengkap: updated?.nama_lengkap || "Admin",
+        username: updated?.username || "admin",
+        email: updated?.email || "admin@sekolah.example",
+        peran: "Administrator",
+        foto_profil: updated?.foto_profil || "",
+      },
+      200
+    );
+  }
+
+  return c.json(
+    {
+      nama_lengkap: body.nama_lengkap || "Admin",
+      username: body.username || "admin",
+      email: body.email || "admin@sekolah.example",
+      peran: "Administrator",
+      foto_profil: body.foto_profil || "",
+    },
+    200
+  );
+});

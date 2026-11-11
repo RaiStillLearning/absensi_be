@@ -1,6 +1,8 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
+import { and, asc, eq } from "drizzle-orm";
+import { db } from "../../config/database";
+import { schedules } from "../../config/schema";
 import { API_TAGS } from "../../shared/constants";
-import { store } from "../../shared/data/store";
 import { ErrorResponseSchema } from "../../shared/types/api";
 
 export const jadwalRouter = new OpenAPIHono();
@@ -48,7 +50,7 @@ export const listJadwalRoute = createRoute({
   },
   responses: {
     200: {
-      description: "List of schedules",
+      description: "List of schedules from PostgreSQL",
       content: {
         "application/json": {
           schema: z.array(JadwalItemSchema),
@@ -58,16 +60,38 @@ export const listJadwalRoute = createRoute({
   },
 });
 
-jadwalRouter.openapi(listJadwalRoute, (c) => {
+jadwalRouter.openapi(listJadwalRoute, async (c) => {
   const { kelas, hari } = c.req.valid("query");
-  let result = store.jadwal;
+  const conditions = [];
   if (kelas && kelas !== "Semua") {
-    result = result.filter((j) => j.kelas === kelas);
+    conditions.push(eq(schedules.kelas, kelas));
   }
   if (hari && hari !== "Semua") {
-    result = result.filter((j) => j.hari === hari);
+    conditions.push(eq(schedules.hari, hari));
   }
-  return c.json(result, 200);
+
+  const rows =
+    conditions.length > 0
+      ? await db
+          .select()
+          .from(schedules)
+          .where(and(...conditions))
+          .orderBy(asc(schedules.id))
+      : await db.select().from(schedules).orderBy(asc(schedules.id));
+
+  return c.json(
+    rows.map((r) => ({
+      id: r.id,
+      kelas: r.kelas,
+      hari: r.hari,
+      jam_ke: r.jam_ke,
+      waktu_mulai: r.waktu_mulai,
+      waktu_selesai: r.waktu_selesai,
+      mata_pelajaran: r.mata_pelajaran,
+      guru: r.guru,
+    })),
+    200
+  );
 });
 
 /**
@@ -110,20 +134,32 @@ export const createJadwalRoute = createRoute({
 
 jadwalRouter.openapi(createJadwalRoute, async (c) => {
   const body = c.req.valid("json");
-  const newId = store.jadwal.length > 0 ? Math.max(...store.jadwal.map((j) => j.id)) + 1 : 1;
-  const newJadwal = {
-    id: newId,
-    kelas: body.kelas,
-    hari: body.hari,
-    jam_ke: body.jam_ke,
-    waktu_mulai: body.waktu_mulai,
-    waktu_selesai: body.waktu_selesai,
-    mata_pelajaran: body.mata_pelajaran,
-    guru: body.guru,
-  };
-  store.jadwal.push(newJadwal);
-  store.persist();
-  return c.json(newJadwal, 201);
+  const [inserted] = await db
+    .insert(schedules)
+    .values({
+      kelas: body.kelas,
+      hari: body.hari,
+      jam_ke: body.jam_ke,
+      waktu_mulai: body.waktu_mulai,
+      waktu_selesai: body.waktu_selesai,
+      mata_pelajaran: body.mata_pelajaran,
+      guru: body.guru,
+    })
+    .returning();
+
+  return c.json(
+    {
+      id: inserted!.id,
+      kelas: inserted!.kelas,
+      hari: inserted!.hari,
+      jam_ke: inserted!.jam_ke,
+      waktu_mulai: inserted!.waktu_mulai,
+      waktu_selesai: inserted!.waktu_selesai,
+      mata_pelajaran: inserted!.mata_pelajaran,
+      guru: inserted!.guru,
+    },
+    201
+  );
 });
 
 /**
@@ -159,13 +195,25 @@ export const getJadwalByIdRoute = createRoute({
   },
 });
 
-jadwalRouter.openapi(getJadwalByIdRoute, (c) => {
+jadwalRouter.openapi(getJadwalByIdRoute, async (c) => {
   const { id } = c.req.valid("param");
-  const item = store.jadwal.find((j) => j.id === id);
+  const [item] = await db.select().from(schedules).where(eq(schedules.id, id)).limit(1);
   if (!item) {
     return c.json({ success: false, message: `Jadwal dengan ID ${id} tidak ditemukan` }, 404);
   }
-  return c.json(item, 200);
+  return c.json(
+    {
+      id: item.id,
+      kelas: item.kelas,
+      hari: item.hari,
+      jam_ke: item.jam_ke,
+      waktu_mulai: item.waktu_mulai,
+      waktu_selesai: item.waktu_selesai,
+      mata_pelajaran: item.mata_pelajaran,
+      guru: item.guru,
+    },
+    200
+  );
 });
 
 /**
@@ -212,24 +260,39 @@ export const updateJadwalRoute = createRoute({
 jadwalRouter.openapi(updateJadwalRoute, async (c) => {
   const { id } = c.req.valid("param");
   const body = c.req.valid("json");
-  const index = store.jadwal.findIndex((j) => j.id === id);
-  if (index === -1) {
+  const [existing] = await db.select().from(schedules).where(eq(schedules.id, id)).limit(1);
+  if (!existing) {
     return c.json({ success: false, message: `Jadwal dengan ID ${id} tidak ditemukan` }, 404);
   }
-  const existing = store.jadwal[index]!;
-  const updated = {
-    id,
-    kelas: body.kelas ?? existing.kelas,
-    hari: body.hari ?? existing.hari,
-    jam_ke: body.jam_ke ?? existing.jam_ke,
-    waktu_mulai: body.waktu_mulai ?? existing.waktu_mulai,
-    waktu_selesai: body.waktu_selesai ?? existing.waktu_selesai,
-    mata_pelajaran: body.mata_pelajaran ?? existing.mata_pelajaran,
-    guru: body.guru ?? existing.guru,
-  };
-  store.jadwal[index] = updated;
-  store.persist();
-  return c.json(updated, 200);
+
+  const [updated] = await db
+    .update(schedules)
+    .set({
+      kelas: body.kelas ?? existing.kelas,
+      hari: body.hari ?? existing.hari,
+      jam_ke: body.jam_ke ?? existing.jam_ke,
+      waktu_mulai: body.waktu_mulai ?? existing.waktu_mulai,
+      waktu_selesai: body.waktu_selesai ?? existing.waktu_selesai,
+      mata_pelajaran: body.mata_pelajaran ?? existing.mata_pelajaran,
+      guru: body.guru ?? existing.guru,
+      updated_at: new Date(),
+    })
+    .where(eq(schedules.id, id))
+    .returning();
+
+  return c.json(
+    {
+      id: updated!.id,
+      kelas: updated!.kelas,
+      hari: updated!.hari,
+      jam_ke: updated!.jam_ke,
+      waktu_mulai: updated!.waktu_mulai,
+      waktu_selesai: updated!.waktu_selesai,
+      mata_pelajaran: updated!.mata_pelajaran,
+      guru: updated!.guru,
+    },
+    200
+  );
 });
 
 /**
@@ -268,13 +331,12 @@ export const deleteJadwalRoute = createRoute({
   },
 });
 
-jadwalRouter.openapi(deleteJadwalRoute, (c) => {
+jadwalRouter.openapi(deleteJadwalRoute, async (c) => {
   const { id } = c.req.valid("param");
-  const index = store.jadwal.findIndex((j) => j.id === id);
-  if (index === -1) {
+  const [existing] = await db.select().from(schedules).where(eq(schedules.id, id)).limit(1);
+  if (!existing) {
     return c.json({ success: false, message: `Jadwal dengan ID ${id} tidak ditemukan` }, 404);
   }
-  store.jadwal.splice(index, 1);
-  store.persist();
+  await db.delete(schedules).where(eq(schedules.id, id));
   return c.json({ success: true, message: "Jadwal berhasil dihapus" }, 200);
 });

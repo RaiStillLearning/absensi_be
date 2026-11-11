@@ -1,6 +1,8 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
+import { asc, eq } from "drizzle-orm";
+import { db } from "../../config/database";
+import { classes } from "../../config/schema";
 import { API_TAGS } from "../../shared/constants";
-import { store } from "../../shared/data/store";
 import { ErrorResponseSchema } from "../../shared/types/api";
 
 export const kelasRouter = new OpenAPIHono();
@@ -28,6 +30,17 @@ export const CreateKelasPayloadSchema = z
 
 export const UpdateKelasPayloadSchema = CreateKelasPayloadSchema.partial().openapi("UpdateKelasPayload");
 
+function mapClassRow(row: typeof classes.$inferSelect, fallbackIdx = 1) {
+  return {
+    id: row.class_code_id ?? fallbackIdx,
+    nama_kelas: row.name,
+    tingkat: row.tingkat || "X",
+    jurusan: row.jurusan || "RPL",
+    wali_kelas: row.wali_kelas || "",
+    tahun_ajaran: row.tahun_ajaran || "2026/2027",
+  };
+}
+
 /**
  * 1. GET /api/v1/kelas
  */
@@ -36,7 +49,7 @@ export const listKelasRoute = createRoute({
   path: "/",
   tags: [API_TAGS.ADMIN],
   summary: "List All School Classes",
-  description: "Returns master list of all classes in the school",
+  description: "Returns master list of all classes in the school from PostgreSQL",
   responses: {
     200: {
       description: "List of classes retrieved",
@@ -49,8 +62,9 @@ export const listKelasRoute = createRoute({
   },
 });
 
-kelasRouter.openapi(listKelasRoute, (c) => {
-  return c.json(store.kelas, 200);
+kelasRouter.openapi(listKelasRoute, async (c) => {
+  const rows = await db.select().from(classes).orderBy(asc(classes.class_code_id));
+  return c.json(rows.map((r, idx) => mapClassRow(r, idx + 1)), 200);
 });
 
 /**
@@ -61,7 +75,7 @@ export const createKelasRoute = createRoute({
   path: "/",
   tags: [API_TAGS.ADMIN],
   summary: "Create New Class",
-  description: "Creates a new class entry",
+  description: "Creates a new class entry in PostgreSQL",
   request: {
     body: {
       content: {
@@ -94,18 +108,25 @@ export const createKelasRoute = createRoute({
 
 kelasRouter.openapi(createKelasRoute, async (c) => {
   const body = c.req.valid("json");
-  const newId = store.kelas.length > 0 ? Math.max(...store.kelas.map((k) => k.id)) + 1 : 1;
-  const newKelas = {
-    id: newId,
-    nama_kelas: body.nama_kelas,
-    tingkat: body.tingkat,
-    jurusan: body.jurusan,
-    wali_kelas: body.wali_kelas,
-    tahun_ajaran: body.tahun_ajaran,
-  };
-  store.kelas.push(newKelas);
-  store.persist();
-  return c.json(newKelas, 201);
+  const existing = await db.select().from(classes);
+  const nextId =
+    existing.length > 0
+      ? Math.max(...existing.map((k, idx) => k.class_code_id ?? idx + 1)) + 1
+      : 1;
+
+  const [inserted] = await db
+    .insert(classes)
+    .values({
+      class_code_id: nextId,
+      name: body.nama_kelas,
+      tingkat: body.tingkat,
+      jurusan: body.jurusan,
+      wali_kelas: body.wali_kelas,
+      tahun_ajaran: body.tahun_ajaran,
+    })
+    .returning();
+
+  return c.json(mapClassRow(inserted!, nextId), 201);
 });
 
 /**
@@ -141,13 +162,18 @@ export const getKelasByIdRoute = createRoute({
   },
 });
 
-kelasRouter.openapi(getKelasByIdRoute, (c) => {
+kelasRouter.openapi(getKelasByIdRoute, async (c) => {
   const { id } = c.req.valid("param");
-  const item = store.kelas.find((k) => k.id === id);
+  const [item] = await db
+    .select()
+    .from(classes)
+    .where(eq(classes.class_code_id, id))
+    .limit(1);
+
   if (!item) {
     return c.json({ success: false, message: `Kelas dengan ID ${id} tidak ditemukan` }, 404);
   }
-  return c.json(item, 200);
+  return c.json(mapClassRow(item, id), 200);
 });
 
 /**
@@ -194,22 +220,30 @@ export const updateKelasRoute = createRoute({
 kelasRouter.openapi(updateKelasRoute, async (c) => {
   const { id } = c.req.valid("param");
   const body = c.req.valid("json");
-  const index = store.kelas.findIndex((k) => k.id === id);
-  if (index === -1) {
+  const [existing] = await db
+    .select()
+    .from(classes)
+    .where(eq(classes.class_code_id, id))
+    .limit(1);
+
+  if (!existing) {
     return c.json({ success: false, message: `Kelas dengan ID ${id} tidak ditemukan` }, 404);
   }
-  const existing = store.kelas[index]!;
-  const updated = {
-    id,
-    nama_kelas: body.nama_kelas ?? existing.nama_kelas,
-    tingkat: body.tingkat ?? existing.tingkat,
-    jurusan: body.jurusan ?? existing.jurusan,
-    wali_kelas: body.wali_kelas ?? existing.wali_kelas,
-    tahun_ajaran: body.tahun_ajaran ?? existing.tahun_ajaran,
-  };
-  store.kelas[index] = updated;
-  store.persist();
-  return c.json(updated, 200);
+
+  const [updated] = await db
+    .update(classes)
+    .set({
+      name: body.nama_kelas ?? existing.name,
+      tingkat: body.tingkat ?? existing.tingkat,
+      jurusan: body.jurusan ?? existing.jurusan,
+      wali_kelas: body.wali_kelas ?? existing.wali_kelas,
+      tahun_ajaran: body.tahun_ajaran ?? existing.tahun_ajaran,
+      updated_at: new Date(),
+    })
+    .where(eq(classes.id, existing.id))
+    .returning();
+
+  return c.json(mapClassRow(updated!, id), 200);
 });
 
 /**
@@ -248,13 +282,18 @@ export const deleteKelasRoute = createRoute({
   },
 });
 
-kelasRouter.openapi(deleteKelasRoute, (c) => {
+kelasRouter.openapi(deleteKelasRoute, async (c) => {
   const { id } = c.req.valid("param");
-  const index = store.kelas.findIndex((k) => k.id === id);
-  if (index === -1) {
+  const [existing] = await db
+    .select()
+    .from(classes)
+    .where(eq(classes.class_code_id, id))
+    .limit(1);
+
+  if (!existing) {
     return c.json({ success: false, message: `Kelas dengan ID ${id} tidak ditemukan` }, 404);
   }
-  store.kelas.splice(index, 1);
-  store.persist();
+
+  await db.delete(classes).where(eq(classes.id, existing.id));
   return c.json({ success: true, message: `Kelas berhasil dihapus` }, 200);
 });

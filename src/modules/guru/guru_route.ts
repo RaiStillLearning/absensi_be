@@ -1,7 +1,16 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
+import { and, asc, eq } from "drizzle-orm";
+import { db } from "../../config/database";
+import {
+  activity_logs,
+  students,
+  subject_attendance_records,
+  teachers,
+  users,
+} from "../../config/schema";
 import { API_TAGS } from "../../shared/constants";
-import { store } from "../../shared/data/store";
 import { ErrorResponseSchema } from "../../shared/types/api";
+import { hashPassword } from "../../shared/utils/hash";
 
 export const guruRouter = new OpenAPIHono();
 
@@ -72,29 +81,142 @@ export const GuruProfileSchema = z
   })
   .openapi("GuruProfile");
 
-// In-memory Profile of Bu Rina (default teacher)
-let teacherProfile = {
-  id: "5",
-  nip: "198905122015012008",
-  nama_lengkap: "Bu Rina Pratiwi, S.Pd.",
-  nama_panggilan: "Bu Rina",
-  peran: "Guru",
-  email: "burina@ghamacaraka.sch.id",
-  telepon: "0812-3456-7890",
-  jenis_kelamin: "Perempuan" as "Laki-laki" | "Perempuan",
-  tempat_lahir: "Jakarta",
-  tanggal_lahir: "12 Mei 1989",
-  alamat: "Depok, Jawa Barat",
-  mata_pelajaran: "Pemrograman Web",
-  kelas_diajar: ["X RPL 1", "XI RPL 1", "XII RPL 1"],
-  isWalas: true,
-  kelasWalas: "X RPL 1",
-  kelas_diampu: "X RPL 1",
-  jumlah_siswa: 32,
-  status_akun: "Aktif" as "Aktif" | "Non-Aktif",
-  tahun_ajaran: "2026/2027",
-  foto_profil: "",
-};
+function mapTeacherToGuruItem(t: typeof teachers.$inferSelect) {
+  return {
+    id: t.id,
+    nama_guru: t.nama_guru,
+    mata_pelajaran: t.mata_pelajaran,
+    nip: t.nip || "",
+    email: t.email || "",
+    nomor_telepon: t.nomor_telepon || "",
+    is_walas: Boolean(t.is_walas),
+    kelas_walas: t.kelas_walas || "",
+    isWalas: Boolean(t.is_walas),
+    kelasWalas: t.kelas_walas || "",
+  };
+}
+
+async function getActiveTeacherProfileRow() {
+  const [rina] = await db.select().from(teachers).where(eq(teachers.id, 5)).limit(1);
+  if (rina) return rina;
+  const [first] = await db.select().from(teachers).orderBy(asc(teachers.id)).limit(1);
+  return first;
+}
+
+function formatTeacherProfile(t?: typeof teachers.$inferSelect) {
+  const isWalas = Boolean(t?.is_walas ?? true);
+  const kelasWalas = t?.kelas_walas ?? "X RPL 1";
+  return {
+    id: String(t?.id ?? 5),
+    nip: t?.nip || "198905122015012008",
+    nama_lengkap: t?.nama_guru || "Bu Rina Pratiwi, S.Pd.",
+    nama_panggilan: t?.nama_panggilan || "Bu Rina",
+    peran: "Guru",
+    email: t?.email || "burina@ghamacaraka.sch.id",
+    telepon: t?.nomor_telepon || "0812-3456-7890",
+    jenis_kelamin: ((t?.jenis_kelamin === "Laki-laki" ? "Laki-laki" : "Perempuan") as
+      | "Laki-laki"
+      | "Perempuan"),
+    tempat_lahir: t?.tempat_lahir || "Jakarta",
+    tanggal_lahir: t?.tanggal_lahir || "12 Mei 1989",
+    alamat: t?.alamat || "Depok, Jawa Barat",
+    mata_pelajaran: t?.mata_pelajaran || "Pemrograman Web",
+    kelas_diajar: ["X RPL 1", "XI RPL 1", "XII RPL 1"],
+    isWalas,
+    kelasWalas,
+    kelas_diampu: kelasWalas,
+    jumlah_siswa: 32,
+    status_akun: ((t?.status_akun === "Non-Aktif" ? "Non-Aktif" : "Aktif") as
+      | "Aktif"
+      | "Non-Aktif"),
+    tahun_ajaran: t?.tahun_ajaran || "2026/2027",
+    foto_profil: t?.foto_profil || "",
+  };
+}
+
+function normalizeDateString(tanggal?: string): string {
+  const raw = (tanggal || "2026-06-06").trim();
+  return raw.includes("T") ? raw.split("T")[0]! : raw;
+}
+
+async function getOrSeedSubjectSession(kelas: string, mapel: string, tanggal: string) {
+  const normKelas = (kelas || "X RPL 1").trim();
+  const normMapel = (mapel || "Pemrograman Web").trim();
+  const normTanggal = normalizeDateString(tanggal);
+
+  const existing = await db
+    .select()
+    .from(subject_attendance_records)
+    .where(
+      and(
+        eq(subject_attendance_records.kelas, normKelas),
+        eq(subject_attendance_records.mata_pelajaran, normMapel),
+        eq(subject_attendance_records.tanggal, normTanggal)
+      )
+    )
+    .orderBy(asc(subject_attendance_records.no_urut));
+
+  if (existing.length > 0) {
+    return existing.map((r, i) => ({
+      no: r.no_urut || i + 1,
+      id: r.record_key,
+      nama_siswa: r.nama_siswa,
+      nisn: r.nisn,
+      status: (r.status as "Hadir" | "Izin" | "Sakit" | "Alpa") || "Hadir",
+      catatan: r.catatan || undefined,
+    }));
+  }
+
+  // Seed session from students in that class (or template session in DB)
+  let classStudents = await db
+    .select()
+    .from(students)
+    .where(eq(students.kelas, normKelas))
+    .orderBy(asc(students.full_name));
+
+  if (classStudents.length === 0) {
+    classStudents = await db
+      .select()
+      .from(students)
+      .where(eq(students.kelas, "X RPL 1"))
+      .orderBy(asc(students.full_name));
+  }
+
+  const slug = normKelas.toLowerCase().replace(/\s+/g, "");
+  const createdItems: Array<{
+    no: number;
+    id: string;
+    nama_siswa: string;
+    nisn: string;
+    status: "Hadir" | "Izin" | "Sakit" | "Alpa";
+    catatan?: string;
+  }> = [];
+
+  for (let i = 0; i < classStudents.length; i++) {
+    const st = classStudents[i]!;
+    const recKey = `${slug}-${i + 1}`;
+    await db.insert(subject_attendance_records).values({
+      record_key: recKey,
+      kelas: normKelas,
+      mata_pelajaran: normMapel,
+      tanggal: normTanggal,
+      no_urut: i + 1,
+      nisn: st.nisn,
+      nama_siswa: st.full_name,
+      status: "Hadir",
+      catatan: "",
+    });
+    createdItems.push({
+      no: i + 1,
+      id: recKey,
+      nama_siswa: st.full_name,
+      nisn: st.nisn,
+      status: "Hadir",
+    });
+  }
+
+  return createdItems;
+}
 
 /**
  * 1. GET /api/v1/guru
@@ -104,7 +226,7 @@ export const listGuruRoute = createRoute({
   path: "/",
   tags: [API_TAGS.ADMIN, API_TAGS.GURU],
   summary: "List All Teachers",
-  description: "Returns master list of teachers with subject and homeroom class roles",
+  description: "Returns master list of teachers from PostgreSQL",
   responses: {
     200: {
       description: "List of teachers retrieved",
@@ -117,19 +239,9 @@ export const listGuruRoute = createRoute({
   },
 });
 
-guruRouter.openapi(listGuruRoute, (c) => {
-  const result = store.guru.map((g) => {
-    const isWalas = Boolean(g.isWalas ?? g.is_walas);
-    const kelasWalas = g.kelasWalas ?? g.kelas_walas ?? "";
-    return {
-      ...g,
-      is_walas: isWalas,
-      kelas_walas: kelasWalas,
-      isWalas,
-      kelasWalas,
-    };
-  });
-  return c.json(result, 200);
+guruRouter.openapi(listGuruRoute, async (c) => {
+  const rows = await db.select().from(teachers).orderBy(asc(teachers.id));
+  return c.json(rows.map(mapTeacherToGuruItem), 200);
 });
 
 /**
@@ -152,7 +264,7 @@ export const createGuruRoute = createRoute({
   },
   responses: {
     201: {
-      description: "Teacher created successfully",
+      description: "Teacher created successfully in PostgreSQL",
       content: {
         "application/json": {
           schema: GuruItemSchema,
@@ -172,24 +284,38 @@ export const createGuruRoute = createRoute({
 
 guruRouter.openapi(createGuruRoute, async (c) => {
   const body = c.req.valid("json");
-  const newId = store.guru.length > 0 ? Math.max(...store.guru.map((g) => g.id)) + 1 : 1;
   const isWalas = Boolean(body.isWalas ?? body.is_walas);
   const kelasWalas = body.kelasWalas ?? body.kelas_walas ?? "";
-  const newGuru = {
-    id: newId,
-    nama_guru: body.nama_guru,
-    mata_pelajaran: body.mata_pelajaran,
-    nip: body.nip,
-    email: body.email,
-    nomor_telepon: body.nomor_telepon,
-    is_walas: isWalas,
-    kelas_walas: kelasWalas,
-    isWalas,
-    kelasWalas,
-  };
-  store.guru.push(newGuru);
-  store.persist();
-  return c.json(newGuru, 201);
+
+  const [inserted] = await db
+    .insert(teachers)
+    .values({
+      nama_guru: body.nama_guru,
+      mata_pelajaran: body.mata_pelajaran,
+      nip: body.nip || "",
+      email: body.email || "",
+      nomor_telepon: body.nomor_telepon || "",
+      is_walas: isWalas,
+      kelas_walas: isWalas ? kelasWalas : "",
+    })
+    .returning();
+
+  if (inserted?.nip) {
+    await db
+      .insert(users)
+      .values({
+        username: inserted.nip,
+        role: "guru",
+        nama_lengkap: inserted.nama_guru,
+        email: inserted.email || "",
+        teacher_id: inserted.id,
+        password_hash: hashPassword("guru123"),
+        is_active: true,
+      })
+      .onConflictDoNothing();
+  }
+
+  return c.json(mapTeacherToGuruItem(inserted!), 201);
 });
 
 /**
@@ -200,7 +326,7 @@ export const getGuruProfileRoute = createRoute({
   path: "/profil",
   tags: [API_TAGS.GURU, API_TAGS.WALAS],
   summary: "Get Current Teacher Profile",
-  description: "Returns profile details for teacher / homeroom teacher",
+  description: "Returns profile details for teacher / homeroom teacher from PostgreSQL",
   responses: {
     200: {
       description: "Teacher profile retrieved",
@@ -213,19 +339,9 @@ export const getGuruProfileRoute = createRoute({
   },
 });
 
-guruRouter.openapi(getGuruProfileRoute, (c) => {
-  const rina = store.guru.find((g) => g.id === 5);
-  if (rina) {
-    teacherProfile.nama_lengkap = rina.nama_guru;
-    teacherProfile.nip = rina.nip || teacherProfile.nip;
-    teacherProfile.email = rina.email || teacherProfile.email;
-    teacherProfile.telepon = rina.nomor_telepon || teacherProfile.telepon;
-    teacherProfile.mata_pelajaran = rina.mata_pelajaran || teacherProfile.mata_pelajaran;
-    teacherProfile.isWalas = Boolean(rina.isWalas ?? rina.is_walas);
-    teacherProfile.kelasWalas = rina.kelasWalas ?? rina.kelas_walas ?? "";
-    teacherProfile.kelas_diampu = teacherProfile.kelasWalas;
-  }
-  return c.json(teacherProfile, 200);
+guruRouter.openapi(getGuruProfileRoute, async (c) => {
+  const row = await getActiveTeacherProfileRow();
+  return c.json(formatTeacherProfile(row), 200);
 });
 
 /**
@@ -248,7 +364,7 @@ export const updateGuruProfileRoute = createRoute({
   },
   responses: {
     200: {
-      description: "Teacher profile updated",
+      description: "Teacher profile updated in PostgreSQL",
       content: {
         "application/json": {
           schema: GuruProfileSchema,
@@ -260,24 +376,31 @@ export const updateGuruProfileRoute = createRoute({
 
 guruRouter.openapi(updateGuruProfileRoute, async (c) => {
   const body = c.req.valid("json");
-  teacherProfile = {
-    ...teacherProfile,
-    ...body,
-  };
-  const rinaIdx = store.guru.findIndex((g) => g.id === 5);
-  if (rinaIdx !== -1) {
-    const existing = store.guru[rinaIdx]!;
-    store.guru[rinaIdx] = {
-      ...existing,
-      nama_guru: teacherProfile.nama_lengkap,
-      nip: teacherProfile.nip,
-      email: teacherProfile.email,
-      nomor_telepon: teacherProfile.telepon,
-      mata_pelajaran: teacherProfile.mata_pelajaran,
-    };
-    store.persist();
+  const current = await getActiveTeacherProfileRow();
+  if (!current) {
+    return c.json(formatTeacherProfile(undefined), 200);
   }
-  return c.json(teacherProfile, 200);
+
+  const [updated] = await db
+    .update(teachers)
+    .set({
+      nama_guru: body.nama_lengkap ?? current.nama_guru,
+      nama_panggilan: body.nama_panggilan ?? current.nama_panggilan,
+      nip: body.nip ?? current.nip,
+      email: body.email ?? current.email,
+      nomor_telepon: body.telepon ?? current.nomor_telepon,
+      jenis_kelamin: body.jenis_kelamin ?? current.jenis_kelamin,
+      tempat_lahir: body.tempat_lahir ?? current.tempat_lahir,
+      tanggal_lahir: body.tanggal_lahir ?? current.tanggal_lahir,
+      alamat: body.alamat ?? current.alamat,
+      mata_pelajaran: body.mata_pelajaran ?? current.mata_pelajaran,
+      foto_profil: body.foto_profil ?? current.foto_profil,
+      updated_at: new Date(),
+    })
+    .where(eq(teachers.id, current.id))
+    .returning();
+
+  return c.json(formatTeacherProfile(updated), 200);
 });
 
 /**
@@ -290,7 +413,7 @@ export const getGuruDashboardRoute = createRoute({
   summary: "Get Teacher Dashboard Overview",
   responses: {
     200: {
-      description: "Teacher dashboard retrieved",
+      description: "Teacher dashboard retrieved from PostgreSQL",
       content: {
         "application/json": {
           schema: z.object({
@@ -318,25 +441,38 @@ export const getGuruDashboardRoute = createRoute({
   },
 });
 
-guruRouter.openapi(getGuruDashboardRoute, (c) => {
+guruRouter.openapi(getGuruDashboardRoute, async (c) => {
+  const row = await getActiveTeacherProfileRow();
+  const profile = formatTeacherProfile(row);
+  const sessionList = await getOrSeedSubjectSession(
+    profile.kelasWalas || "X RPL 1",
+    profile.mata_pelajaran,
+    "2026-06-06"
+  );
+
+  const hadir = sessionList.filter((s) => s.status === "Hadir").length;
+  const izin = sessionList.filter((s) => s.status === "Izin").length;
+  const sakit = sessionList.filter((s) => s.status === "Sakit").length;
+  const alpa = sessionList.filter((s) => s.status === "Alpa").length;
+
   return c.json(
     {
-      guru: teacherProfile,
+      guru: profile,
       kelas_aktif: {
         id: "kls-1",
-        nama_kelas: "X RPL 1",
+        nama_kelas: profile.kelasWalas || "X RPL 1",
         jurusan: "Rekayasa Perangkat Lunak",
-        mata_pelajaran: teacherProfile.mata_pelajaran,
+        mata_pelajaran: profile.mata_pelajaran,
         tanggal: "19/10/2026",
         jam: "10:30",
         status: "Aktif",
       },
       rekap: {
-        hadir: 24,
-        izin: 4,
-        sakit: 4,
-        alpa: 0,
-        total: 32,
+        hadir: hadir || 24,
+        izin: izin || 4,
+        sakit: sakit || 4,
+        alpa,
+        total: sessionList.length || 32,
       },
     },
     200
@@ -360,7 +496,7 @@ export const getGuruAbsensiSesiRoute = createRoute({
   },
   responses: {
     200: {
-      description: "Student attendance session list",
+      description: "Student attendance session list from PostgreSQL",
       content: {
         "application/json": {
           schema: z.array(SiswaAbsensiItemSchema),
@@ -370,9 +506,9 @@ export const getGuruAbsensiSesiRoute = createRoute({
   },
 });
 
-guruRouter.openapi(getGuruAbsensiSesiRoute, (c) => {
+guruRouter.openapi(getGuruAbsensiSesiRoute, async (c) => {
   const { kelas, mapel, tanggal } = c.req.valid("query");
-  const list = store.getAbsensiSesi(kelas, mapel, tanggal);
+  const list = await getOrSeedSubjectSession(kelas, mapel, tanggal);
   return c.json(list, 200);
 });
 
@@ -402,7 +538,7 @@ export const saveGuruAbsensiSesiRoute = createRoute({
   },
   responses: {
     200: {
-      description: "Attendance session saved successfully",
+      description: "Attendance session saved successfully in PostgreSQL",
       content: {
         "application/json": {
           schema: z.object({
@@ -418,19 +554,51 @@ export const saveGuruAbsensiSesiRoute = createRoute({
 
 guruRouter.openapi(saveGuruAbsensiSesiRoute, async (c) => {
   const body = c.req.valid("json");
-  const kelas = body.kelas;
-  const mapel = body.mapel;
-  const tanggal = body.tanggal;
+  const normKelas = (body.kelas || "X RPL 1").trim();
+  const normMapel = (body.mapel || "Pemrograman Web").trim();
+  const normTanggal = normalizeDateString(body.tanggal);
   const rawList = body.siswa || body.siswa_list || [];
+
+  await db
+    .delete(subject_attendance_records)
+    .where(
+      and(
+        eq(subject_attendance_records.kelas, normKelas),
+        eq(subject_attendance_records.mata_pelajaran, normMapel),
+        eq(subject_attendance_records.tanggal, normTanggal)
+      )
+    );
+
   const cleanList = rawList.map((item, idx) => ({
     ...item,
     no: item.no ?? idx + 1,
   }));
-  store.saveAbsensiSesi(kelas, mapel, tanggal, cleanList);
+
+  for (const item of cleanList) {
+    await db.insert(subject_attendance_records).values({
+      record_key: item.id,
+      kelas: normKelas,
+      mata_pelajaran: normMapel,
+      tanggal: normTanggal,
+      no_urut: item.no,
+      nisn: item.nisn,
+      nama_siswa: item.nama_siswa,
+      status: item.status,
+      catatan: item.catatan || "",
+    });
+  }
+
+  await db.insert(activity_logs).values({
+    jenis: "absensi",
+    judul: "Absensi kelas diperbarui",
+    deskripsi: `Guru mengisi absensi ${normKelas} (${normMapel}).`,
+    waktu: "Baru saja",
+  });
+
   return c.json(
     {
       success: true,
-      message: `Data absensi kelas ${kelas} (${mapel}) berhasil disimpan!`,
+      message: `Data absensi kelas ${normKelas} (${normMapel}) berhasil disimpan!`,
       data: cleanList,
     },
     200
@@ -462,7 +630,7 @@ export const patchGuruAbsensiStudentRoute = createRoute({
   },
   responses: {
     200: {
-      description: "Student status updated",
+      description: "Student status updated in PostgreSQL",
       content: {
         "application/json": {
           schema: z.object({
@@ -478,7 +646,24 @@ export const patchGuruAbsensiStudentRoute = createRoute({
 guruRouter.openapi(patchGuruAbsensiStudentRoute, async (c) => {
   const { id } = c.req.valid("param");
   const { status, kelas, mapel, tanggal } = c.req.valid("json");
-  store.updateStudentStatus(kelas, mapel, tanggal, id, status);
+  const normKelas = (kelas || "X RPL 1").trim();
+  const normMapel = (mapel || "Pemrograman Web").trim();
+  const normTanggal = normalizeDateString(tanggal);
+
+  await getOrSeedSubjectSession(normKelas, normMapel, normTanggal);
+
+  await db
+    .update(subject_attendance_records)
+    .set({ status, updated_at: new Date() })
+    .where(
+      and(
+        eq(subject_attendance_records.kelas, normKelas),
+        eq(subject_attendance_records.mata_pelajaran, normMapel),
+        eq(subject_attendance_records.tanggal, normTanggal),
+        eq(subject_attendance_records.record_key, id)
+      )
+    );
+
   return c.json(
     {
       success: true,
@@ -514,7 +699,7 @@ export const updateGuruAbsensiStatusRoute = createRoute({
   },
   responses: {
     200: {
-      description: "Student status updated",
+      description: "Student status updated in PostgreSQL",
       content: {
         "application/json": {
           schema: z.object({
@@ -529,7 +714,24 @@ export const updateGuruAbsensiStatusRoute = createRoute({
 
 guruRouter.openapi(updateGuruAbsensiStatusRoute, async (c) => {
   const { kelas, mapel, tanggal, siswa_id, status } = c.req.valid("json");
-  store.updateStudentStatus(kelas, mapel, tanggal, siswa_id, status);
+  const normKelas = (kelas || "X RPL 1").trim();
+  const normMapel = (mapel || "Pemrograman Web").trim();
+  const normTanggal = normalizeDateString(tanggal);
+
+  await getOrSeedSubjectSession(normKelas, normMapel, normTanggal);
+
+  await db
+    .update(subject_attendance_records)
+    .set({ status, updated_at: new Date() })
+    .where(
+      and(
+        eq(subject_attendance_records.kelas, normKelas),
+        eq(subject_attendance_records.mata_pelajaran, normMapel),
+        eq(subject_attendance_records.tanggal, normTanggal),
+        eq(subject_attendance_records.record_key, siswa_id)
+      )
+    );
+
   return c.json(
     {
       success: true,
@@ -559,7 +761,7 @@ export const deleteGuruAbsensiStudentRoute = createRoute({
   },
   responses: {
     200: {
-      description: "Student removed from session",
+      description: "Student removed from session in PostgreSQL",
       content: {
         "application/json": {
           schema: z.object({
@@ -572,10 +774,26 @@ export const deleteGuruAbsensiStudentRoute = createRoute({
   },
 });
 
-guruRouter.openapi(deleteGuruAbsensiStudentRoute, (c) => {
+guruRouter.openapi(deleteGuruAbsensiStudentRoute, async (c) => {
   const { id } = c.req.valid("param");
   const { kelas, mapel, tanggal } = c.req.valid("query");
-  store.deleteStudentFromSession(kelas, mapel, tanggal, id);
+  const normKelas = (kelas || "X RPL 1").trim();
+  const normMapel = (mapel || "Pemrograman Web").trim();
+  const normTanggal = normalizeDateString(tanggal);
+
+  await getOrSeedSubjectSession(normKelas, normMapel, normTanggal);
+
+  await db
+    .delete(subject_attendance_records)
+    .where(
+      and(
+        eq(subject_attendance_records.kelas, normKelas),
+        eq(subject_attendance_records.mata_pelajaran, normMapel),
+        eq(subject_attendance_records.tanggal, normTanggal),
+        eq(subject_attendance_records.record_key, id)
+      )
+    );
+
   return c.json(
     {
       success: true,
@@ -602,7 +820,7 @@ export const getGuruRekapRoute = createRoute({
   },
   responses: {
     200: {
-      description: "Recapitulation report data",
+      description: "Recapitulation report data from PostgreSQL",
       content: {
         "application/json": {
           schema: z.object({
@@ -635,9 +853,9 @@ export const getGuruRekapRoute = createRoute({
   },
 });
 
-guruRouter.openapi(getGuruRekapRoute, (c) => {
+guruRouter.openapi(getGuruRekapRoute, async (c) => {
   const { kelas, mapel, tanggal } = c.req.valid("query");
-  const rawSiswa = store.getAbsensiSesi(kelas, mapel, tanggal);
+  const rawSiswa = await getOrSeedSubjectSession(kelas, mapel, tanggal);
   const rows = rawSiswa.map((item, index) => {
     const hadir = item.status === "Hadir" ? 1 : 0;
     const izin = item.status === "Izin" ? 1 : 0;
@@ -695,7 +913,7 @@ export const getGuruByIdRoute = createRoute({
   },
   responses: {
     200: {
-      description: "Teacher details retrieved",
+      description: "Teacher details retrieved from PostgreSQL",
       content: {
         "application/json": {
           schema: GuruItemSchema,
@@ -713,29 +931,13 @@ export const getGuruByIdRoute = createRoute({
   },
 });
 
-guruRouter.openapi(getGuruByIdRoute, (c) => {
+guruRouter.openapi(getGuruByIdRoute, async (c) => {
   const { id } = c.req.valid("param");
-  const item = store.guru.find((g) => g.id === id);
+  const [item] = await db.select().from(teachers).where(eq(teachers.id, id)).limit(1);
   if (!item) {
     return c.json({ success: false, message: `Guru dengan ID ${id} tidak ditemukan` }, 404);
   }
-  const isWalas = Boolean(item.isWalas ?? item.is_walas);
-  const kelasWalas = item.kelasWalas ?? item.kelas_walas ?? "";
-  return c.json(
-    {
-      id: item.id,
-      nama_guru: item.nama_guru,
-      mata_pelajaran: item.mata_pelajaran,
-      nip: item.nip,
-      email: item.email,
-      nomor_telepon: item.nomor_telepon,
-      is_walas: isWalas,
-      kelas_walas: kelasWalas,
-      isWalas,
-      kelasWalas,
-    },
-    200
-  );
+  return c.json(mapTeacherToGuruItem(item), 200);
 });
 
 /**
@@ -761,7 +963,7 @@ export const updateGuruRoute = createRoute({
   },
   responses: {
     200: {
-      description: "Teacher updated successfully",
+      description: "Teacher updated successfully in PostgreSQL",
       content: {
         "application/json": {
           schema: GuruItemSchema,
@@ -782,28 +984,40 @@ export const updateGuruRoute = createRoute({
 guruRouter.openapi(updateGuruRoute, async (c) => {
   const { id } = c.req.valid("param");
   const body = c.req.valid("json");
-  const index = store.guru.findIndex((g) => g.id === id);
-  if (index === -1) {
+  const [existing] = await db.select().from(teachers).where(eq(teachers.id, id)).limit(1);
+  if (!existing) {
     return c.json({ success: false, message: `Guru dengan ID ${id} tidak ditemukan` }, 404);
   }
-  const existing = store.guru[index]!;
-  const isWalas = typeof body.isWalas !== "undefined" ? body.isWalas : typeof body.is_walas !== "undefined" ? body.is_walas : existing.is_walas;
-  const kelasWalas = typeof body.kelasWalas !== "undefined" ? body.kelasWalas : typeof body.kelas_walas !== "undefined" ? body.kelas_walas : existing.kelas_walas;
-  const updated = {
-    id,
-    nama_guru: body.nama_guru ?? existing.nama_guru,
-    mata_pelajaran: body.mata_pelajaran ?? existing.mata_pelajaran,
-    nip: body.nip ?? existing.nip,
-    email: body.email ?? existing.email,
-    nomor_telepon: body.nomor_telepon ?? existing.nomor_telepon,
-    is_walas: Boolean(isWalas),
-    kelas_walas: kelasWalas || "",
-    isWalas: Boolean(isWalas),
-    kelasWalas: kelasWalas || "",
-  };
-  store.guru[index] = updated;
-  store.persist();
-  return c.json(updated, 200);
+
+  const isWalas =
+    typeof body.isWalas !== "undefined"
+      ? body.isWalas
+      : typeof body.is_walas !== "undefined"
+        ? body.is_walas
+        : existing.is_walas;
+  const kelasWalas =
+    typeof body.kelasWalas !== "undefined"
+      ? body.kelasWalas
+      : typeof body.kelas_walas !== "undefined"
+        ? body.kelas_walas
+        : existing.kelas_walas;
+
+  const [updated] = await db
+    .update(teachers)
+    .set({
+      nama_guru: body.nama_guru ?? existing.nama_guru,
+      mata_pelajaran: body.mata_pelajaran ?? existing.mata_pelajaran,
+      nip: body.nip ?? existing.nip,
+      email: body.email ?? existing.email,
+      nomor_telepon: body.nomor_telepon ?? existing.nomor_telepon,
+      is_walas: Boolean(isWalas),
+      kelas_walas: isWalas ? kelasWalas || "" : "",
+      updated_at: new Date(),
+    })
+    .where(eq(teachers.id, id))
+    .returning();
+
+  return c.json(mapTeacherToGuruItem(updated!), 200);
 });
 
 /**
@@ -821,7 +1035,7 @@ export const deleteGuruRoute = createRoute({
   },
   responses: {
     200: {
-      description: "Teacher deleted successfully",
+      description: "Teacher deleted successfully from PostgreSQL",
       content: {
         "application/json": {
           schema: z.object({
@@ -842,13 +1056,12 @@ export const deleteGuruRoute = createRoute({
   },
 });
 
-guruRouter.openapi(deleteGuruRoute, (c) => {
+guruRouter.openapi(deleteGuruRoute, async (c) => {
   const { id } = c.req.valid("param");
-  const index = store.guru.findIndex((g) => g.id === id);
-  if (index === -1) {
+  const [existing] = await db.select().from(teachers).where(eq(teachers.id, id)).limit(1);
+  if (!existing) {
     return c.json({ success: false, message: `Guru dengan ID ${id} tidak ditemukan` }, 404);
   }
-  store.guru.splice(index, 1);
-  store.persist();
+  await db.delete(teachers).where(eq(teachers.id, id));
   return c.json({ success: true, message: `Guru berhasil dihapus` }, 200);
 });

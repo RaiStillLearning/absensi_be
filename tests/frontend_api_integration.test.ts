@@ -32,69 +32,70 @@ async function runTests() {
   await testEndpoint("OpenAPI Specification", "/docs/api/openapi.json");
 
   // 2. Authentication
-  await testEndpoint("Admin Login", "/api/v1/auth/login", {
+  const adminLogin = await testEndpoint("Admin Login", "/api/v1/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ nisn_atau_username: "admin", kata_sandi: "admin123" }),
   });
+  const adminHeaders = adminLogin?.access_token ? { Authorization: `Bearer ${adminLogin.access_token}` } : {};
 
-  await testEndpoint("Guru Login", "/api/v1/auth/login", {
+  const guruLogin = await testEndpoint("Guru Login", "/api/v1/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ nisn_atau_username: "198905122015012008", kata_sandi: "guru123" }),
   });
+  const guruHeaders = guruLogin?.access_token ? { Authorization: `Bearer ${guruLogin.access_token}` } : {};
 
-  await testEndpoint("Siswa Login", "/api/v1/auth/login", {
+  const siswaLogin = await testEndpoint("Siswa Login", "/api/v1/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ nisn_atau_username: "0102641001", kata_sandi: "siswa123" }),
   });
+  const siswaHeaders = siswaLogin?.access_token ? { Authorization: `Bearer ${siswaLogin.access_token}` } : {};
 
   // 3. Dashboard Endpoints
-  await testEndpoint("Dashboard Stats", "/api/v1/dashboard/stats");
-  await testEndpoint("Rekap Kehadiran 5 Hari", "/api/v1/dashboard/rekap-kehadiran");
-  await testEndpoint("Aktivitas Terbaru", "/api/v1/dashboard/aktivitas-terbaru");
-  await testEndpoint("Ringkasan Absensi", "/api/v1/dashboard/ringkasan-absensi");
+  await testEndpoint("Dashboard Stats", "/api/v1/dashboard/stats", { headers: adminHeaders });
+  await testEndpoint("Rekap Kehadiran 5 Hari", "/api/v1/dashboard/rekap-kehadiran", { headers: adminHeaders });
+  await testEndpoint("Aktivitas Terbaru", "/api/v1/dashboard/aktivitas-terbaru", { headers: adminHeaders });
+  await testEndpoint("Ringkasan Absensi", "/api/v1/dashboard/ringkasan-absensi", { headers: adminHeaders });
 
   // 4. Kelas Endpoints
-  await testEndpoint("List Kelas", "/api/v1/kelas");
-  await testEndpoint("Get Kelas by ID", "/api/v1/kelas/1");
+  await testEndpoint("List Kelas", "/api/v1/kelas", { headers: adminHeaders });
+  await testEndpoint("Get Kelas by ID", "/api/v1/kelas/1", { headers: adminHeaders });
 
   // 5. Guru Endpoints
-  await testEndpoint("List Guru", "/api/v1/guru");
-  await testEndpoint("Get Guru Profil", "/api/v1/guru/profil");
-  await testEndpoint("Get Guru Dashboard", "/api/v1/guru/dashboard");
-  await testEndpoint("Get Guru Absensi Sesi", "/api/v1/guru/absensi?kelas=X%20RPL%201&mapel=Pemrograman%20Web&tanggal=2026-06-06");
-  await testEndpoint("Get Guru Rekap", "/api/v1/guru/rekap?kelas=X%20RPL%201&mapel=Pemrograman%20Web&tanggal=2026-06-06");
+  await testEndpoint("List Guru", "/api/v1/guru", { headers: adminHeaders });
+  await testEndpoint("Get Guru Profil", "/api/v1/guru/profil", { headers: guruHeaders });
+  await testEndpoint("Get Guru Dashboard", "/api/v1/guru/dashboard", { headers: guruHeaders });
+  await testEndpoint("Get Guru Absensi Sesi", "/api/v1/guru/absensi?kelas=X%20RPL%201&mapel=Pemrograman%20Web&tanggal=2026-06-06", { headers: guruHeaders });
+  await testEndpoint("Get Guru Rekap", "/api/v1/guru/rekap?kelas=X%20RPL%201&mapel=Pemrograman%20Web&tanggal=2026-06-06", { headers: guruHeaders });
 
   // 6. Jadwal Endpoints
-  await testEndpoint("List Jadwal", "/api/v1/jadwal?kelas=X%20RPL%201");
-  await testEndpoint("Get Jadwal by ID", "/api/v1/jadwal/1");
+  await testEndpoint("List Jadwal", "/api/v1/jadwal?kelas=X%20RPL%201", { headers: adminHeaders });
+  await testEndpoint("Get Jadwal by ID", "/api/v1/jadwal/1", { headers: adminHeaders });
 
   // 7. Absensi Admin
-  await testEndpoint("Admin Monitoring Absensi", "/api/v1/absensi?tanggal=2026-10-19");
+  await testEndpoint("Admin Monitoring Absensi", "/api/v1/absensi?tanggal=2026-10-19", { headers: adminHeaders });
 
   // 8. Admin Profil
-  await testEndpoint("Admin Profil", "/api/v1/admin/profil");
+  await testEndpoint("Admin Profil", "/api/v1/admin/profil", { headers: adminHeaders });
 
   // 9. Walas Endpoints
-  await testEndpoint("Walas Dashboard", "/api/v1/walas/dashboard");
-  await testEndpoint("Walas Monitoring", "/api/v1/walas/monitoring?tanggal=2026-06-05");
-  await testEndpoint("Walas Rekap Bulan Ini", "/api/v1/walas/rekap/bulan-ini");
+  await testEndpoint("Walas Dashboard", "/api/v1/walas/dashboard", { headers: guruHeaders });
+  await testEndpoint("Walas Monitoring", "/api/v1/walas/monitoring?tanggal=2026-06-05", { headers: guruHeaders });
+  await testEndpoint("Walas Rekap Bulan Ini", "/api/v1/walas/rekap/bulan-ini", { headers: guruHeaders });
 
   // 10. Siswa Endpoints
-  await testEndpoint("Siswa Profil", "/api/v1/siswa/profil");
-  await testEndpoint("Siswa Metrik Kehadiran", "/api/v1/siswa/metrik-kehadiran");
-  await testEndpoint("Siswa Jadwal Hari Ini", "/api/v1/siswa/jadwal/hari-ini");
-  await testEndpoint("Siswa Jadwal Mingguan", "/api/v1/siswa/jadwal/mingguan");
-  await testEndpoint("Siswa Absensi Realtime", "/api/v1/siswa/absensi/realtime");
-  await testEndpoint("Siswa Kehadiran", "/api/v1/siswa/kehadiran");
-  await testEndpoint("Siswa Rekap Bulanan", "/api/v1/siswa/kehadiran/rekap?bulan=2025-01");
+  await testEndpoint("Siswa Profil", "/api/v1/siswa/profil", { headers: siswaHeaders });
+  await testEndpoint("Siswa Metrik Kehadiran", "/api/v1/siswa/metrik-kehadiran", { headers: siswaHeaders });
+  await testEndpoint("Siswa Jadwal Hari Ini", "/api/v1/siswa/jadwal/hari-ini", { headers: siswaHeaders });
+  await testEndpoint("Siswa Jadwal Mingguan", "/api/v1/siswa/jadwal/mingguan", { headers: siswaHeaders });
+  await testEndpoint("Siswa Absensi Realtime", "/api/v1/siswa/absensi/realtime", { headers: siswaHeaders });
+  await testEndpoint("Siswa Kehadiran", "/api/v1/siswa/kehadiran", { headers: siswaHeaders });
+  await testEndpoint("Siswa Rekap Bulanan", "/api/v1/siswa/kehadiran/rekap?bulan=2025-01", { headers: siswaHeaders });
 
   console.log(`\n🎉 Test Summary: ${passed} Passed, ${failed} Failed`);
-  if (failed > 0) {
-    process.exit(1);
-  }
+  process.exit(failed > 0 ? 1 : 0);
 }
 
 runTests();

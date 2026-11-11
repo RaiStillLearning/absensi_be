@@ -2,8 +2,9 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { and, eq } from "drizzle-orm";
-import { closeDatabaseConnection, db } from "../config/database";
+import { closeDatabaseConnection, db, ensureDatabaseInitialized } from "../config/database";
 import { env } from "../config/env";
+import { hashPassword } from "../shared/utils/hash";
 import {
   classes,
   class_students,
@@ -105,6 +106,7 @@ function parseCsvLine(line: string): string[] {
 export async function importStudentsFromCsv(
   csvFilePath = join(process.cwd(), "data", "students.csv")
 ): Promise<ImportSummary> {
+  await ensureDatabaseInitialized();
   console.log("📥 Memulai import data siswa dari CSV ke PostgreSQL...");
   console.log(`📁 Lokasi file: ${csvFilePath}\n`);
 
@@ -134,10 +136,7 @@ export async function importStudentsFromCsv(
 
   // Pre-hash default student password with bcrypt cost 10
   const defaultPassword = env.STUDENT_DEFAULT_PASSWORD || "Ghama123!";
-  const passwordHash = await Bun.password.hash(defaultPassword, {
-    algorithm: "bcrypt",
-    cost: 10,
-  });
+  const passwordHash = hashPassword(defaultPassword);
 
   // Track unique classes to cache class records
   const classCache = new Map<string, { id: string; name: string }>();

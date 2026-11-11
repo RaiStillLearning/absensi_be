@@ -1,6 +1,14 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
+import { asc, eq, or } from "drizzle-orm";
+import { db } from "../../config/database";
+import {
+  classes,
+  daily_attendance_records,
+  daily_attendances,
+  students,
+  teachers,
+} from "../../config/schema";
 import { API_TAGS } from "../../shared/constants";
-import { store } from "../../shared/data/store";
 import { ErrorResponseSchema } from "../../shared/types/api";
 
 export const walasRouter = new OpenAPIHono();
@@ -45,8 +53,50 @@ export const SiswaHarianWalasItemSchema = z
 
 export type SiswaHarianWalas = z.infer<typeof SiswaHarianWalasItemSchema>;
 
-// Siswa Harian Walas synced with DataStore
+function mapDbStatusToWalasStatus(
+  status: string
+): "Hadir" | "Izin" | "Sakit" | "Alpa" | "Tidak Hadir" {
+  if (status === "present") return "Hadir";
+  if (status === "excused") return "Izin";
+  if (status === "sick") return "Sakit";
+  return "Tidak Hadir";
+}
 
+function mapWalasStatusToDbStatus(status: string): string {
+  if (status === "Hadir") return "present";
+  if (status === "Izin") return "excused";
+  if (status === "Sakit") return "sick";
+  return "absent";
+}
+
+async function getWalasDailyRecords(): Promise<SiswaHarianWalas[]> {
+  const rows = await db
+    .select({
+      record_id: daily_attendance_records.id,
+      record_code: daily_attendance_records.record_code,
+      attendance_status: daily_attendance_records.attendance_status,
+      jam_masuk: daily_attendance_records.jam_masuk,
+      keterangan: daily_attendance_records.keterangan,
+      student_id: students.id,
+      nis: students.nis,
+      nisn: students.nisn,
+      nama_siswa: students.full_name,
+    })
+    .from(daily_attendance_records)
+    .innerJoin(students, eq(daily_attendance_records.student_id, students.id))
+    .orderBy(asc(students.nisn));
+
+  return rows.map((r, idx) => ({
+    no: idx + 1,
+    id: r.record_code || `w-${idx + 1}`,
+    nis: r.nis || `24251000${idx + 1}`,
+    nisn: r.nisn,
+    nama_siswa: r.nama_siswa,
+    jam_masuk: r.jam_masuk && r.jam_masuk !== "—" ? r.jam_masuk : undefined,
+    status: mapDbStatusToWalasStatus(r.attendance_status),
+    keterangan: r.keterangan || "Tepat waktu",
+  }));
+}
 
 /**
  * 1. GET /api/v1/walas/dashboard
@@ -58,7 +108,7 @@ export const getWalasDashboardRoute = createRoute({
   summary: "Get Homeroom Teacher Dashboard",
   responses: {
     200: {
-      description: "Homeroom dashboard retrieved",
+      description: "Homeroom dashboard retrieved from PostgreSQL",
       content: {
         "application/json": {
           schema: z.object({
@@ -78,13 +128,17 @@ export const getWalasDashboardRoute = createRoute({
   },
 });
 
-walasRouter.openapi(getWalasDashboardRoute, (c) => {
-  const guru = store.guru.find((g) => g.id === 5) || store.guru[0];
-  const countHadir = store.walasSiswaList.filter((s) => s.status === "Hadir").length;
-  const countIzin = store.walasSiswaList.filter((s) => s.status === "Izin").length;
-  const countSakit = store.walasSiswaList.filter((s) => s.status === "Sakit").length;
-  const countAlfa = store.walasSiswaList.filter((s) => s.status === "Tidak Hadir" || s.status === "Alpa").length;
-  const total = store.walasSiswaList.length;
+walasRouter.openapi(getWalasDashboardRoute, async (c) => {
+  const [guru] = await db.select().from(teachers).where(eq(teachers.id, 5)).limit(1);
+  const walasSiswaList = await getWalasDailyRecords();
+
+  const countHadir = walasSiswaList.filter((s) => s.status === "Hadir").length;
+  const countIzin = walasSiswaList.filter((s) => s.status === "Izin").length;
+  const countSakit = walasSiswaList.filter((s) => s.status === "Sakit").length;
+  const countAlfa = walasSiswaList.filter(
+    (s) => s.status === "Tidak Hadir" || s.status === "Alpa"
+  ).length;
+  const total = walasSiswaList.length;
   const persentase = total > 0 ? Math.round((countHadir / total) * 100) : 0;
 
   return c.json(
@@ -93,23 +147,25 @@ walasRouter.openapi(getWalasDashboardRoute, (c) => {
         id: String(guru?.id ?? "5"),
         nip: guru?.nip ?? "198905122015012008",
         nama_lengkap: guru?.nama_guru ?? "Bu Rina Pratiwi, S.Pd.",
-        nama_panggilan: "Bu Rina",
+        nama_panggilan: guru?.nama_panggilan || "Bu Rina",
         peran: "Guru",
         email: guru?.email ?? "burina@ghamacaraka.sch.id",
         telepon: guru?.nomor_telepon ?? "0812-3456-7890",
-        jenis_kelamin: "Perempuan" as const,
-        tanggal_lahir: "12 Mei 1989",
-        tempat_lahir: "Jakarta",
+        jenis_kelamin: ((guru?.jenis_kelamin === "Laki-laki" ? "Laki-laki" : "Perempuan") as
+          | "Laki-laki"
+          | "Perempuan"),
+        tanggal_lahir: guru?.tanggal_lahir || "12 Mei 1989",
+        tempat_lahir: guru?.tempat_lahir || "Jakarta",
         mata_pelajaran: guru?.mata_pelajaran ?? "Pemrograman Web",
-        alamat: "Depok, Jawa Barat",
+        alamat: guru?.alamat || "Depok, Jawa Barat",
         username: guru?.nip || "burina",
         status_akun: "Aktif" as const,
-        isWalas: true,
-        kelasWalas: guru?.kelasWalas || guru?.kelas_walas || "X RPL 1",
-        kelas_diampu: guru?.kelasWalas || guru?.kelas_walas || "X RPL 1",
+        isWalas: Boolean(guru?.is_walas ?? true),
+        kelasWalas: guru?.kelas_walas || "X RPL 1",
+        kelas_diampu: guru?.kelas_walas || "X RPL 1",
         jumlah_siswa: total,
-        tahun_ajaran: "2026/2027",
-        foto_profil: "",
+        tahun_ajaran: guru?.tahun_ajaran || "2026/2027",
+        foto_profil: guru?.foto_profil || "",
       },
       rekap: {
         hadir: countHadir,
@@ -141,7 +197,7 @@ export const getWalasMonitoringRoute = createRoute({
   },
   responses: {
     200: {
-      description: "Monitoring list and stats",
+      description: "Monitoring list and stats from PostgreSQL",
       content: {
         "application/json": {
           schema: z.object({
@@ -162,9 +218,10 @@ export const getWalasMonitoringRoute = createRoute({
   },
 });
 
-walasRouter.openapi(getWalasMonitoringRoute, (c) => {
+walasRouter.openapi(getWalasMonitoringRoute, async (c) => {
   const { tanggal, status, cari } = c.req.valid("query");
-  let filtered = store.walasSiswaList;
+  const allList = await getWalasDailyRecords();
+  let filtered = allList;
 
   if (status && status !== "Semua") {
     filtered = filtered.filter((s) => s.status === status);
@@ -177,11 +234,13 @@ walasRouter.openapi(getWalasMonitoringRoute, (c) => {
     );
   }
 
-  const countHadir = store.walasSiswaList.filter((s) => s.status === "Hadir").length;
-  const countIzin = store.walasSiswaList.filter((s) => s.status === "Izin").length;
-  const countSakit = store.walasSiswaList.filter((s) => s.status === "Sakit").length;
-  const countAlpa = store.walasSiswaList.filter((s) => s.status === "Tidak Hadir" || s.status === "Alpa").length;
-  const total = store.walasSiswaList.length;
+  const countHadir = allList.filter((s) => s.status === "Hadir").length;
+  const countIzin = allList.filter((s) => s.status === "Izin").length;
+  const countSakit = allList.filter((s) => s.status === "Sakit").length;
+  const countAlpa = allList.filter(
+    (s) => s.status === "Tidak Hadir" || s.status === "Alpa"
+  ).length;
+  const total = allList.length;
   const persentase = total > 0 ? Math.round((countHadir / total) * 100) : 0;
 
   return c.json(
@@ -236,7 +295,7 @@ export const updateWalasStudentStatusRoute = createRoute({
   },
   responses: {
     200: {
-      description: "Student status updated",
+      description: "Student status updated in PostgreSQL",
       content: {
         "application/json": {
           schema: z.object({
@@ -261,23 +320,30 @@ export const updateWalasStudentStatusRoute = createRoute({
 walasRouter.openapi(updateWalasStudentStatusRoute, async (c) => {
   const { id } = c.req.valid("param");
   const { status, keterangan } = c.req.valid("json");
-  const index = store.walasSiswaList.findIndex((s) => s.id === id);
-  if (index === -1) {
+
+  const [record] = await db
+    .select()
+    .from(daily_attendance_records)
+    .where(eq(daily_attendance_records.record_code, id))
+    .limit(1);
+
+  if (!record) {
     return c.json({ success: false, message: "Siswa tidak ditemukan" }, 404);
   }
-  const existing = store.walasSiswaList[index]!;
-  const updatedItem: SiswaHarianWalas = {
-    no: existing.no,
-    id: existing.id,
-    nis: existing.nis,
-    nisn: existing.nisn,
-    nama_siswa: existing.nama_siswa,
-    jam_masuk: existing.jam_masuk,
-    status,
-    keterangan: keterangan || (status === "Hadir" ? "Tepat waktu" : "-"),
-  };
-  store.walasSiswaList[index] = updatedItem;
-  store.persist();
+
+  const newKet = keterangan || (status === "Hadir" ? "Tepat waktu" : "-");
+  await db
+    .update(daily_attendance_records)
+    .set({
+      attendance_status: mapWalasStatusToDbStatus(status),
+      keterangan: newKet,
+      updated_at: new Date(),
+    })
+    .where(eq(daily_attendance_records.id, record.id));
+
+  const allList = await getWalasDailyRecords();
+  const updatedItem = allList.find((s) => s.id === id) || allList[0]!;
+
   return c.json(
     {
       success: true,
@@ -303,7 +369,7 @@ export const deleteWalasStudentRoute = createRoute({
   },
   responses: {
     200: {
-      description: "Student removed",
+      description: "Student removed from PostgreSQL",
       content: {
         "application/json": {
           schema: z.object({
@@ -316,10 +382,11 @@ export const deleteWalasStudentRoute = createRoute({
   },
 });
 
-walasRouter.openapi(deleteWalasStudentRoute, (c) => {
+walasRouter.openapi(deleteWalasStudentRoute, async (c) => {
   const { id } = c.req.valid("param");
-  store.walasSiswaList = store.walasSiswaList.filter((s) => s.id !== id);
-  store.persist();
+  await db
+    .delete(daily_attendance_records)
+    .where(eq(daily_attendance_records.record_code, id));
   return c.json({ success: true, message: "Data siswa berhasil dihapus." }, 200);
 });
 
@@ -333,7 +400,7 @@ export const getWalasRekapBulanIniRoute = createRoute({
   summary: "Get Monthly Attendance Recap for Homeroom Class",
   responses: {
     200: {
-      description: "Monthly recap data",
+      description: "Monthly recap data from PostgreSQL",
       content: {
         "application/json": {
           schema: z.object({
@@ -365,8 +432,9 @@ export const getWalasRekapBulanIniRoute = createRoute({
   },
 });
 
-walasRouter.openapi(getWalasRekapBulanIniRoute, (c) => {
-  const siswaList = store.walasSiswaList.map((s, idx) => ({
+walasRouter.openapi(getWalasRekapBulanIniRoute, async (c) => {
+  const walasSiswaList = await getWalasDailyRecords();
+  const siswaList = walasSiswaList.map((s, idx) => ({
     no: idx + 1,
     id: `rkw-${s.id}`,
     nisn: s.nisn,
@@ -424,7 +492,7 @@ export const saveWalasAbsensiRoute = createRoute({
   },
   responses: {
     200: {
-      description: "Homeroom attendance saved",
+      description: "Homeroom attendance saved in PostgreSQL",
       content: {
         "application/json": {
           schema: z.object({
@@ -439,8 +507,64 @@ export const saveWalasAbsensiRoute = createRoute({
 
 walasRouter.openapi(saveWalasAbsensiRoute, async (c) => {
   const { kelas, tanggal, siswa } = c.req.valid("json");
-  store.walasSiswaList = siswa;
-  store.persist();
+  const [session] = await db.select().from(daily_attendances).limit(1);
+
+  let sessionId = session?.id;
+  if (!sessionId) {
+    const [cls] = await db
+      .select()
+      .from(classes)
+      .where(or(eq(classes.name, kelas), eq(classes.name, "X RPL 1")))
+      .limit(1);
+    if (cls) {
+      const [newSession] = await db
+        .insert(daily_attendances)
+        .values({
+          class_id: cls.id,
+          attendance_date: new Date().toISOString().split("T")[0] || "2026-11-11",
+          status: "active",
+        })
+        .returning();
+      sessionId = newSession?.id;
+    }
+  }
+
+  if (sessionId) {
+    for (const s of siswa) {
+      const [st] = await db.select().from(students).where(eq(students.nisn, s.nisn)).limit(1);
+      if (st) {
+        const [existingRec] = await db
+          .select()
+          .from(daily_attendance_records)
+          .where(eq(daily_attendance_records.student_id, st.id))
+          .limit(1);
+
+        if (existingRec) {
+          await db
+            .update(daily_attendance_records)
+            .set({
+              record_code: s.id,
+              attendance_status: mapWalasStatusToDbStatus(s.status),
+              jam_masuk: s.jam_masuk || "—",
+              keterangan: s.keterangan || "Tepat waktu",
+              updated_at: new Date(),
+            })
+            .where(eq(daily_attendance_records.id, existingRec.id));
+        } else {
+          await db.insert(daily_attendance_records).values({
+            daily_attendance_id: sessionId,
+            student_id: st.id,
+            record_code: s.id,
+            attendance_status: mapWalasStatusToDbStatus(s.status),
+            attendance_source: "manual",
+            jam_masuk: s.jam_masuk || "—",
+            keterangan: s.keterangan || "Tepat waktu",
+          });
+        }
+      }
+    }
+  }
+
   return c.json(
     {
       success: true,
