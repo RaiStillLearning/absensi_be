@@ -179,25 +179,25 @@ walasRouter.openapi(getWalasDashboardRoute, async (c) => {
   return c.json(
     {
       profile: {
-        id: String(guru?.id ?? "5"),
-        nip: guru?.nip ?? "198905122015012008",
-        nama_lengkap: guru?.nama_guru ?? "Bu Rina Pratiwi, S.Pd.",
-        nama_panggilan: guru?.nama_panggilan || "Bu Rina",
+        id: String(guru?.id ?? ""),
+        nip: guru?.nip ?? "",
+        nama_lengkap: guru?.nama_guru ?? "",
+        nama_panggilan: guru?.nama_panggilan || guru?.nama_guru?.split(",")[0] || "",
         peran: "Guru",
-        email: guru?.email ?? "burina@ghamacaraka.sch.id",
-        telepon: guru?.nomor_telepon ?? "0812-3456-7890",
+        email: guru?.email ?? "",
+        telepon: guru?.nomor_telepon ?? "",
         jenis_kelamin: ((guru?.jenis_kelamin === "Laki-laki" ? "Laki-laki" : "Perempuan") as
           | "Laki-laki"
           | "Perempuan"),
-        tanggal_lahir: guru?.tanggal_lahir || "12 Mei 1989",
-        tempat_lahir: guru?.tempat_lahir || "Jakarta",
-        mata_pelajaran: guru?.mata_pelajaran ?? "Pemrograman Web",
-        alamat: guru?.alamat || "Depok, Jawa Barat",
-        username: guru?.nip || "burina",
+        tanggal_lahir: guru?.tanggal_lahir || "",
+        tempat_lahir: guru?.tempat_lahir || "",
+        mata_pelajaran: guru?.mata_pelajaran ?? "",
+        alamat: guru?.alamat || "",
+        username: guru?.nip || "",
         status_akun: "Aktif" as const,
-        isWalas: Boolean(guru?.is_walas ?? true),
-        kelasWalas: guru?.kelas_walas || "X RPL 1",
-        kelas_diampu: guru?.kelas_walas || "X RPL 1",
+        isWalas: Boolean(guru?.is_walas ?? false),
+        kelasWalas: guru?.kelas_walas || "",
+        kelas_diampu: guru?.kelas_walas || "",
         jumlah_siswa: total,
         tahun_ajaran: guru?.tahun_ajaran || "2026/2027",
         foto_profil: guru?.foto_profil || "",
@@ -225,7 +225,7 @@ export const getWalasMonitoringRoute = createRoute({
   summary: "Get Homeroom Daily Class Attendance Monitoring",
   request: {
     query: z.object({
-      tanggal: z.string().optional().default("2026-06-05"),
+      tanggal: z.string().optional(),
       status: z.string().optional().default("Semua"),
       cari: z.string().optional(),
     }),
@@ -254,7 +254,8 @@ export const getWalasMonitoringRoute = createRoute({
 });
 
 walasRouter.openapi(getWalasMonitoringRoute, async (c) => {
-  const { tanggal, status, cari } = c.req.valid("query");
+  const { tanggal: rawTanggal, status, cari } = c.req.valid("query");
+  const tanggal = rawTanggal || new Date().toISOString().slice(0, 10);
   const allList = await getWalasDailyRecords();
   let filtered = allList;
 

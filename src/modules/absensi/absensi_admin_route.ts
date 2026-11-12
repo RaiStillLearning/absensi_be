@@ -1,8 +1,24 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { count, eq } from "drizzle-orm";
 import { db } from "../../config/database";
-import { classes, daily_attendance_records, students } from "../../config/schema";
+import {
+  classes,
+  daily_attendance_records,
+  daily_attendances,
+  students,
+} from "../../config/schema";
 import { API_TAGS } from "../../shared/constants";
+
+function formatIndonesianDate(isoDate?: string): string {
+  const parsed = isoDate ? new Date(`${isoDate}T00:00:00`) : new Date();
+  const dateObj = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  return new Intl.DateTimeFormat("id-ID", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(dateObj);
+}
 
 export const absensiAdminRouter = new OpenAPIHono();
 
@@ -69,7 +85,11 @@ export const getMonitoringAbsensiRoute = createRoute({
 });
 
 absensiAdminRouter.openapi(getMonitoringAbsensiRoute, async (c) => {
-  const { kelas, cari_siswa, halaman, jumlah_per_halaman } = c.req.valid("query");
+  const { tanggal, kelas, cari_siswa, halaman, jumlah_per_halaman } = c.req.valid("query");
+  const targetDate =
+    tanggal && /^\d{4}-\d{2}-\d{2}$/.test(tanggal)
+      ? tanggal
+      : new Date().toISOString().slice(0, 10);
 
   const [classCount] = await db.select({ value: count() }).from(classes);
   const [studentCount] = await db.select({ value: count() }).from(students);
@@ -84,30 +104,27 @@ absensiAdminRouter.openapi(getMonitoringAbsensiRoute, async (c) => {
       keterangan: daily_attendance_records.keterangan,
     })
     .from(daily_attendance_records)
-    .innerJoin(students, eq(daily_attendance_records.student_id, students.id));
+    .innerJoin(students, eq(daily_attendance_records.student_id, students.id))
+    .innerJoin(
+      daily_attendances,
+      eq(daily_attendance_records.daily_attendance_id, daily_attendances.id)
+    )
+    .where(eq(daily_attendances.attendance_date, targetDate));
 
   let list = joinedRows.map((r) => ({
     nama_siswa: r.nama_siswa,
     nisn: r.nisn,
-    kelas: r.kelas || "X RPL 1",
+    kelas: r.kelas || "-",
     status: mapDbStatusToDisplay(r.status),
-    jam_masuk: r.jam_masuk || "06:45",
-    keterangan: r.keterangan || "Tepat waktu",
+    jam_masuk: r.jam_masuk || "-",
+    keterangan: r.keterangan || "",
   }));
 
-  let hadir = list.filter((i) => i.status === "Hadir").length;
-  let izin = list.filter((i) => i.status === "Izin").length;
-  let sakit = list.filter((i) => i.status === "Sakit").length;
-  let alpha = list.filter((i) => i.status === "Alpa").length;
-  const totalSiswa = Math.max(studentCount?.value || 320, 320);
-
-  if (list.length < totalSiswa) {
-    const diff = totalSiswa - list.length;
-    hadir += Math.max(0, diff - 10);
-    izin += 5;
-    sakit += 3;
-    alpha += 2;
-  }
+  const hadir = list.filter((i) => i.status === "Hadir").length;
+  const izin = list.filter((i) => i.status === "Izin").length;
+  const sakit = list.filter((i) => i.status === "Sakit").length;
+  const alpha = list.filter((i) => i.status === "Alpa").length;
+  const totalSiswa = studentCount?.value ?? 0;
 
   if (kelas && kelas !== "Semua Kelas") {
     list = list.filter((a) => a.kelas === kelas);
@@ -129,8 +146,8 @@ absensiAdminRouter.openapi(getMonitoringAbsensiRoute, async (c) => {
     {
       ringkasan: {
         total_siswa: totalSiswa,
-        total_kelas: classCount?.value || 12,
-        tanggal: "Senin, 19 Oktober 2026",
+        total_kelas: classCount?.value ?? 0,
+        tanggal: formatIndonesianDate(targetDate),
         hadir,
         izin,
         sakit,

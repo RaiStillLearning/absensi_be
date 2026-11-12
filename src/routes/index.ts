@@ -11,6 +11,7 @@ import { walasRouter } from "../modules/walas/walas_route";
 import { siswaRouter } from "../modules/siswa/siswa_route";
 import { API_TAGS, APP_CONSTANTS } from "../shared/constants";
 import { requireAuth } from "../middlewares/auth";
+import { readLocalAvatarFile } from "../shared/utils/upload";
 
 /**
  * Health Check Route Specification
@@ -111,6 +112,23 @@ apiV1Router.use("/absensi/*", requireAuth(["admin", "guru", "walas"]));
 
 apiV1Router.use("/siswa", requireAuth(["admin", "siswa"]));
 apiV1Router.use("/siswa/*", requireAuth(["admin", "siswa"]));
+
+// Public avatar image serving endpoint (no auth header required on <img> tags)
+apiV1Router.get("/uploads/avatars/:filename", async (c) => {
+  const filename = c.req.param("filename");
+  const file = await readLocalAvatarFile(filename);
+  if (!file) {
+    return c.json({ success: false, message: "Foto profil tidak ditemukan" }, 404);
+  }
+  return new Response(new Uint8Array(file.buffer), {
+    status: 200,
+    headers: {
+      "Content-Type": file.mimeType,
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "public, max-age=31536000, immutable",
+    },
+  });
+});
 
 // Mount All Domain Routers
 apiV1Router.route("/auth", authRouter);

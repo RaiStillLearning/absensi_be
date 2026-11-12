@@ -411,6 +411,7 @@ export async function getUserProfile(
       nama_lengkap: guru.nama_guru,
       email: guru.email || "",
       mata_pelajaran: guru.mata_pelajaran,
+      foto_profil: guru.foto_profil || "",
       isWalas: Boolean(guru.is_walas),
       kelasWalas: guru.kelas_walas || "",
     };
@@ -439,5 +440,94 @@ export async function getUserProfile(
     nisn: studentRow.nisn,
     kelas: studentRow.kelas,
     jurusan: studentRow.jurusan,
+    foto_profil: studentRow.foto_profil || "",
   };
+}
+
+/**
+ * Updates `foto_profil` across both `users` and the role-specific table (`teachers` / `students`).
+ * Returns the previous photo URL so callers can safely clean up orphaned files.
+ */
+export async function updateUserProfilePhoto(
+  userId: string,
+  role: string,
+  username: string | undefined,
+  newFotoUrl: string
+): Promise<{ previousFoto: string | null; foto_profil: string } | null> {
+  await ensureDatabaseInitialized();
+
+  if (role === "admin") {
+    let [adminUser] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!adminUser && username) {
+      [adminUser] = await db.select().from(users).where(eq(users.username, username)).limit(1);
+    }
+    if (!adminUser) {
+      [adminUser] = await db.select().from(users).where(eq(users.role, "admin")).limit(1);
+    }
+    if (!adminUser) return null;
+
+    const previousFoto = adminUser.foto_profil || null;
+    await db
+      .update(users)
+      .set({ foto_profil: newFotoUrl, updated_at: new Date() })
+      .where(eq(users.id, adminUser.id));
+
+    return { previousFoto, foto_profil: newFotoUrl };
+  }
+
+  if (role === "guru" || role === "walas") {
+    const numericId = Number(userId);
+    let guru: typeof teachers.$inferSelect | undefined;
+    if (!Number.isNaN(numericId) && numericId > 0) {
+      [guru] = await db.select().from(teachers).where(eq(teachers.id, numericId)).limit(1);
+    }
+    if (!guru && username) {
+      [guru] = await db.select().from(teachers).where(eq(teachers.nip, username)).limit(1);
+    }
+    if (!guru) return null;
+
+    const previousFoto = guru.foto_profil || null;
+    await db
+      .update(teachers)
+      .set({ foto_profil: newFotoUrl, updated_at: new Date() })
+      .where(eq(teachers.id, guru.id));
+
+    await db
+      .update(users)
+      .set({ foto_profil: newFotoUrl, updated_at: new Date() })
+      .where(
+        guru.nip
+          ? or(eq(users.teacher_id, guru.id), eq(users.username, guru.nip))
+          : eq(users.teacher_id, guru.id)
+      );
+
+    return { previousFoto, foto_profil: newFotoUrl };
+  }
+
+  let [studentRow] = await db
+    .select()
+    .from(students)
+    .where(eq(students.nisn, userId))
+    .limit(1);
+
+  if (!studentRow && /^[0-9a-f-]{36}$/i.test(userId)) {
+    [studentRow] = await db.select().from(students).where(eq(students.id, userId)).limit(1);
+  }
+  if (!studentRow && username) {
+    [studentRow] = await db.select().from(students).where(eq(students.nisn, username)).limit(1);
+  }
+  if (!studentRow) return null;
+
+  const previousFoto = studentRow.foto_profil || null;
+  await db
+    .update(students)
+    .set({ foto_profil: newFotoUrl, updated_at: new Date() })
+    .where(eq(students.id, studentRow.id));
+
+  await db
+    .update(users)
+    .set({ foto_profil: newFotoUrl, updated_at: new Date() })
+    .where(or(eq(users.student_id, studentRow.id), eq(users.username, studentRow.nisn)));
+
+  return { previousFoto, foto_profil: newFotoUrl };
 }

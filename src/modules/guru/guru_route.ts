@@ -15,6 +15,10 @@ import { type DecodedAuthToken } from "../../middlewares/auth";
 import { API_TAGS } from "../../shared/constants";
 import { ErrorResponseSchema } from "../../shared/types/api";
 import { hashPassword } from "../../shared/utils/hash";
+import {
+  deleteLocalAvatarIfOwned,
+  validateProfilePhotoValue,
+} from "../../shared/utils/upload";
 
 export const guruRouter = new OpenAPIHono();
 
@@ -187,7 +191,7 @@ async function formatTeacherProfile(t?: typeof teachers.$inferSelect) {
 }
 
 function normalizeDateString(tanggal?: string): string {
-  const raw = (tanggal || "2026-06-06").trim();
+  const raw = (tanggal || new Date().toISOString().slice(0, 10)).trim();
   return raw.includes("T") ? raw.split("T")[0]! : raw;
 }
 
@@ -423,16 +427,32 @@ export const updateGuruProfileRoute = createRoute({
         },
       },
     },
+    400: {
+      description: "Invalid profile photo",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
   },
 });
 
 guruRouter.openapi(updateGuruProfileRoute, async (c) => {
   const body = c.req.valid("json");
+  if (body.foto_profil !== undefined) {
+    const validation = validateProfilePhotoValue(body.foto_profil);
+    if (!validation.valid) {
+      return c.json({ success: false, message: validation.error }, 400);
+    }
+  }
+
   const current = await getTeacherFromContext(c);
   if (!current) {
     return c.json(await formatTeacherProfile(undefined), 200);
   }
 
+  const previousFoto = current.foto_profil;
   const [updated] = await db
     .update(teachers)
     .set({
@@ -451,6 +471,21 @@ guruRouter.openapi(updateGuruProfileRoute, async (c) => {
     })
     .where(eq(teachers.id, current.id))
     .returning();
+
+  if (body.foto_profil !== undefined) {
+    await db
+      .update(users)
+      .set({ foto_profil: body.foto_profil, updated_at: new Date() })
+      .where(
+        current.nip
+          ? or(eq(users.teacher_id, current.id), eq(users.username, current.nip))
+          : eq(users.teacher_id, current.id)
+      );
+
+    if (previousFoto && previousFoto !== body.foto_profil) {
+      await deleteLocalAvatarIfOwned(previousFoto);
+    }
+  }
 
   return c.json(await formatTeacherProfile(updated), 200);
 });
@@ -552,7 +587,7 @@ export const getGuruAbsensiSesiRoute = createRoute({
     query: z.object({
       kelas: z.string().optional().default("X RPL 1"),
       mapel: z.string().optional().default("Pemrograman Web"),
-      tanggal: z.string().optional().default("2026-06-06"),
+      tanggal: z.string().optional(),
     }),
   },
   responses: {
@@ -572,7 +607,8 @@ guruRouter.openapi(getGuruAbsensiSesiRoute, async (c) => {
   const teacher = await getTeacherFromContext(c);
   const targetKelas = kelas || teacher?.kelas_walas || "X RPL 1";
   const targetMapel = mapel || teacher?.mata_pelajaran || "Pemrograman Web";
-  const list = await getOrSeedSubjectSession(targetKelas, targetMapel, tanggal);
+  const targetTanggal = normalizeDateString(tanggal);
+  const list = await getOrSeedSubjectSession(targetKelas, targetMapel, targetTanggal);
   return c.json(list, 200);
 });
 
@@ -686,7 +722,7 @@ export const patchGuruAbsensiStudentRoute = createRoute({
             status: z.enum(["Hadir", "Izin", "Sakit", "Alpa"]),
             kelas: z.string().optional().default("X RPL 1"),
             mapel: z.string().optional().default("Pemrograman Web"),
-            tanggal: z.string().optional().default("2026-06-06"),
+            tanggal: z.string().optional(),
           }),
         },
       },
@@ -821,7 +857,7 @@ export const deleteGuruAbsensiStudentRoute = createRoute({
     query: z.object({
       kelas: z.string().optional().default("X RPL 1"),
       mapel: z.string().optional().default("Pemrograman Web"),
-      tanggal: z.string().optional().default("2026-06-06"),
+      tanggal: z.string().optional(),
     }),
   },
   responses: {
@@ -880,7 +916,7 @@ export const getGuruRekapRoute = createRoute({
     query: z.object({
       kelas: z.string().optional().default("X RPL 1"),
       mapel: z.string().optional().default("Pemrograman Web"),
-      tanggal: z.string().optional().default("2026-06-06"),
+      tanggal: z.string().optional(),
     }),
   },
   responses: {
@@ -920,7 +956,8 @@ export const getGuruRekapRoute = createRoute({
 
 guruRouter.openapi(getGuruRekapRoute, async (c) => {
   const { kelas, mapel, tanggal } = c.req.valid("query");
-  const rawSiswa = await getOrSeedSubjectSession(kelas, mapel, tanggal);
+  const targetTanggal = normalizeDateString(tanggal);
+  const rawSiswa = await getOrSeedSubjectSession(kelas, mapel, targetTanggal);
   const rows = rawSiswa.map((item, index) => {
     const hadir = item.status === "Hadir" ? 1 : 0;
     const izin = item.status === "Izin" ? 1 : 0;
@@ -950,7 +987,7 @@ guruRouter.openapi(getGuruRekapRoute, async (c) => {
     {
       kelas,
       mata_pelajaran: mapel,
-      tanggal,
+      tanggal: targetTanggal,
       total_siswa,
       total_hadir,
       total_izin,

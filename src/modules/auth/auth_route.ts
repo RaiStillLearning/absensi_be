@@ -1,21 +1,26 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { sign, verify } from "hono/jwt";
 import { env } from "../../config/env";
-import { rateLimitAuth } from "../../middlewares/auth";
+import { getAuthUser, rateLimitAuth, requireAuth } from "../../middlewares/auth";
 import { API_TAGS } from "../../shared/constants";
 import { ErrorResponseSchema } from "../../shared/types/api";
+import {
+  deleteLocalAvatarIfOwned,
+  saveValidatedAvatarFile,
+} from "../../shared/utils/upload";
 import {
   AuthProfileResponseSchema,
   LoginRequestSchema,
   LoginSuccessResponseSchema,
 } from "./auth_schema";
-import { authenticateUser, getUserProfile } from "./auth_service";
+import { authenticateUser, getUserProfile, updateUserProfilePhoto } from "./auth_service";
 
 export const authRouter = new OpenAPIHono();
 
 authRouter.use("/login", rateLimitAuth());
 authRouter.use("/guru/login", rateLimitAuth());
 authRouter.use("/siswa/login", rateLimitAuth());
+authRouter.use("/profil/*", requireAuth());
 
 /**
  * 1. POST /api/v1/auth/login (Universal Login)
@@ -362,4 +367,105 @@ authRouter.openapi(refreshRoute, async (c) => {
   } catch {
     return c.json({ success: false, message: "Refresh token telah kedaluwarsa atau tidak valid" }, 401);
   }
+});
+
+/**
+ * 6. POST /api/v1/auth/profil/foto
+ * Upload & save validated profile photo (JPG, JPEG, PNG <= 1 MB)
+ */
+authRouter.post("/profil/foto", async (c) => {
+  const authUser = getAuthUser(c);
+  if (!authUser) {
+    return c.json({ success: false, message: "Akses ditolak: Token autentikasi diperlukan" }, 401);
+  }
+
+  let body: Record<string, string | File>;
+  try {
+    body = await c.req.parseBody();
+  } catch {
+    return c.json(
+      { success: false, message: "Request upload tidak valid. Gunakan multipart/form-data." },
+      400
+    );
+  }
+
+  const candidate = body.foto ?? body.file ?? body.avatar;
+  if (!candidate || typeof candidate === "string") {
+    return c.json(
+      { success: false, message: "File foto wajib dilampirkan pada field 'foto'." },
+      400
+    );
+  }
+
+  try {
+    const ownerKey = `${authUser.role}_${authUser.username || authUser.sub}`;
+    const saved = await saveValidatedAvatarFile(candidate, ownerKey);
+    const updated = await updateUserProfilePhoto(
+      String(authUser.sub),
+      authUser.role,
+      authUser.username,
+      saved.publicUrl
+    );
+
+    if (!updated) {
+      await deleteLocalAvatarIfOwned(saved.publicUrl);
+      return c.json({ success: false, message: "Akun pengguna tidak ditemukan." }, 404);
+    }
+
+    if (updated.previousFoto && updated.previousFoto !== saved.publicUrl) {
+      await deleteLocalAvatarIfOwned(updated.previousFoto);
+    }
+
+    return c.json(
+      {
+        success: true,
+        message: "Foto profil berhasil diperbarui.",
+        data: {
+          foto_profil: saved.publicUrl,
+        },
+      },
+      200
+    );
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Gagal memproses foto profil yang diunggah.";
+    return c.json({ success: false, message }, 400);
+  }
+});
+
+/**
+ * 7. DELETE /api/v1/auth/profil/foto
+ * Remove current user's profile photo
+ */
+authRouter.delete("/profil/foto", async (c) => {
+  const authUser = getAuthUser(c);
+  if (!authUser) {
+    return c.json({ success: false, message: "Akses ditolak: Token autentikasi diperlukan" }, 401);
+  }
+
+  const updated = await updateUserProfilePhoto(
+    String(authUser.sub),
+    authUser.role,
+    authUser.username,
+    ""
+  );
+
+  if (!updated) {
+    return c.json({ success: false, message: "Akun pengguna tidak ditemukan." }, 404);
+  }
+
+  if (updated.previousFoto) {
+    await deleteLocalAvatarIfOwned(updated.previousFoto);
+  }
+
+  return c.json(
+    {
+      success: true,
+      message: "Foto profil berhasil dihapus.",
+      data: {
+        foto_profil: "",
+      },
+    },
+    200
+  );
 });

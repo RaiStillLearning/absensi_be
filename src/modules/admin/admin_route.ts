@@ -2,7 +2,13 @@ import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { eq } from "drizzle-orm";
 import { db } from "../../config/database";
 import { users } from "../../config/schema";
+import { getAuthUser } from "../../middlewares/auth";
 import { API_TAGS } from "../../shared/constants";
+import { ErrorResponseSchema } from "../../shared/types/api";
+import {
+  deleteLocalAvatarIfOwned,
+  validateProfilePhotoValue,
+} from "../../shared/utils/upload";
 
 export const adminRouter = new OpenAPIHono();
 
@@ -37,7 +43,14 @@ export const getAdminProfileRoute = createRoute({
 });
 
 adminRouter.openapi(getAdminProfileRoute, async (c) => {
-  const [adminUser] = await db.select().from(users).where(eq(users.role, "admin")).limit(1);
+  const authUser = getAuthUser(c);
+  let adminUser: typeof users.$inferSelect | undefined;
+  if (authUser?.sub) {
+    [adminUser] = await db.select().from(users).where(eq(users.id, authUser.sub)).limit(1);
+  }
+  if (!adminUser) {
+    [adminUser] = await db.select().from(users).where(eq(users.role, "admin")).limit(1);
+  }
   return c.json(
     {
       nama_lengkap: adminUser?.nama_lengkap || "Admin",
@@ -77,14 +90,38 @@ export const updateAdminProfileRoute = createRoute({
         },
       },
     },
+    400: {
+      description: "Invalid profile photo",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
   },
 });
 
 adminRouter.openapi(updateAdminProfileRoute, async (c) => {
   const body = c.req.valid("json");
-  const [adminUser] = await db.select().from(users).where(eq(users.role, "admin")).limit(1);
+
+  if (body.foto_profil !== undefined) {
+    const validation = validateProfilePhotoValue(body.foto_profil);
+    if (!validation.valid) {
+      return c.json({ success: false, message: validation.error }, 400);
+    }
+  }
+
+  const authUser = getAuthUser(c);
+  let adminUser: typeof users.$inferSelect | undefined;
+  if (authUser?.sub) {
+    [adminUser] = await db.select().from(users).where(eq(users.id, authUser.sub)).limit(1);
+  }
+  if (!adminUser) {
+    [adminUser] = await db.select().from(users).where(eq(users.role, "admin")).limit(1);
+  }
 
   if (adminUser) {
+    const previousFoto = adminUser.foto_profil;
     const [updated] = await db
       .update(users)
       .set({
@@ -96,6 +133,14 @@ adminRouter.openapi(updateAdminProfileRoute, async (c) => {
       })
       .where(eq(users.id, adminUser.id))
       .returning();
+
+    if (
+      body.foto_profil !== undefined &&
+      previousFoto &&
+      previousFoto !== body.foto_profil
+    ) {
+      await deleteLocalAvatarIfOwned(previousFoto);
+    }
 
     return c.json(
       {

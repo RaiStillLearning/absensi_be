@@ -1,10 +1,11 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-import { count, desc } from "drizzle-orm";
+import { and, count, desc, eq, gte, lte } from "drizzle-orm";
 import { db } from "../../config/database";
 import {
   activity_logs,
   classes,
   daily_attendance_records,
+  daily_attendances,
   students,
   teachers,
 } from "../../config/schema";
@@ -12,50 +13,80 @@ import { API_TAGS } from "../../shared/constants";
 
 export const dashboardRouter = new OpenAPIHono();
 
+function getTodayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function formatIndonesianDate(date = new Date()): string {
+  return new Intl.DateTimeFormat("id-ID", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(date);
+}
+
+function getCurrentWeekDates(): { label: string; iso: string }[] {
+  const now = new Date();
+  const day = now.getDay(); // 0 = Sun, 1 = Mon, ...
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now);
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(now.getDate() + diffToMonday);
+
+  const labels = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat"];
+  return labels.map((label, idx) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + idx);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return { label, iso: `${yyyy}-${mm}-${dd}` };
+  });
+}
+
 async function computeSchoolAttendanceSummary() {
   const [classCount] = await db.select({ value: count() }).from(classes);
   const [teacherCount] = await db.select({ value: count() }).from(teachers);
   const [studentCount] = await db.select({ value: count() }).from(students);
 
-  const records = await db.select().from(daily_attendance_records);
+  const todayIso = getTodayIsoDate();
+  const todayRecords = await db
+    .select({
+      attendance_status: daily_attendance_records.attendance_status,
+    })
+    .from(daily_attendance_records)
+    .innerJoin(
+      daily_attendances,
+      eq(daily_attendance_records.daily_attendance_id, daily_attendances.id)
+    )
+    .where(eq(daily_attendances.attendance_date, todayIso));
+
   let hadir = 0;
   let izin = 0;
   let sakit = 0;
   let alpha = 0;
 
-  for (const r of records) {
+  for (const r of todayRecords) {
     if (r.attendance_status === "present") hadir++;
     else if (r.attendance_status === "excused") izin++;
     else if (r.attendance_status === "sick") sakit++;
     else alpha++;
   }
 
-  const totalSiswa = Math.max(studentCount?.value || 320, 320);
-  const totalKelas = classCount?.value || 12;
-  const totalGuru = teacherCount?.value || 12;
+  const totalSiswa = studentCount?.value ?? 0;
+  const totalKelas = classCount?.value ?? 0;
+  const totalGuru = teacherCount?.value ?? 0;
 
-  // Scale today's school-wide numbers proportionally if records are only for 1 class
-  if (records.length > 0 && records.length < totalSiswa) {
-    const diff = totalSiswa - (hadir + izin + sakit + alpha);
-    hadir += Math.max(0, diff - 10);
-    izin += 5;
-    sakit += 3;
-    alpha += 2;
-  } else if (records.length === 0) {
-    hadir = 301;
-    izin = 9;
-    sakit = 6;
-    alpha = 4;
-  }
-
-  const kehadiranHariIni = totalSiswa > 0 ? Math.round((hadir / totalSiswa) * 100) : 94;
+  const kehadiranHariIni =
+    totalSiswa > 0 && todayRecords.length > 0 ? Math.round((hadir / totalSiswa) * 100) : 0;
 
   return {
     total_siswa: totalSiswa,
     total_guru: totalGuru,
     total_kelas: totalKelas,
     kehadiran_hari_ini: kehadiranHariIni,
-    kenaikan_kehadiran: 2,
+    kenaikan_kehadiran: 0,
     hadir,
     izin,
     sakit,
@@ -134,14 +165,52 @@ export const getRekapKehadiranRoute = createRoute({
 });
 
 dashboardRouter.openapi(getRekapKehadiranRoute, async (c) => {
-  const stats = await computeSchoolAttendanceSummary();
-  const rekap5Hari = [
-    { hari: "Senin", hadir: stats.hadir, izin: stats.izin, sakit: stats.sakit, alpha: stats.alpha },
-    { hari: "Selasa", hadir: 305, izin: 7, sakit: 5, alpha: 3 },
-    { hari: "Rabu", hadir: 298, izin: 11, sakit: 7, alpha: 4 },
-    { hari: "Kamis", hadir: 308, izin: 5, sakit: 5, alpha: 2 },
-    { hari: "Jumat", hadir: 302, izin: 8, sakit: 6, alpha: 4 },
-  ];
+  const weekDays = getCurrentWeekDates();
+  const mondayIso = weekDays[0]!.iso;
+  const fridayIso = weekDays[weekDays.length - 1]!.iso;
+
+  const weekRecords = await db
+    .select({
+      attendance_date: daily_attendances.attendance_date,
+      attendance_status: daily_attendance_records.attendance_status,
+    })
+    .from(daily_attendance_records)
+    .innerJoin(
+      daily_attendances,
+      eq(daily_attendance_records.daily_attendance_id, daily_attendances.id)
+    )
+    .where(
+      and(
+        gte(daily_attendances.attendance_date, mondayIso),
+        lte(daily_attendances.attendance_date, fridayIso)
+      )
+    );
+
+  const tallyMap = new Map<
+    string,
+    { hadir: number; izin: number; sakit: number; alpha: number }
+  >();
+  for (const d of weekDays) {
+    tallyMap.set(d.iso, { hadir: 0, izin: 0, sakit: 0, alpha: 0 });
+  }
+
+  for (const rec of weekRecords) {
+    const bucket = tallyMap.get(String(rec.attendance_date));
+    if (!bucket) continue;
+    if (rec.attendance_status === "present") bucket.hadir++;
+    else if (rec.attendance_status === "excused") bucket.izin++;
+    else if (rec.attendance_status === "sick") bucket.sakit++;
+    else bucket.alpha++;
+  }
+
+  const rekap5Hari = weekDays.map((d) => {
+    const counts = tallyMap.get(d.iso) ?? { hadir: 0, izin: 0, sakit: 0, alpha: 0 };
+    return {
+      hari: d.label,
+      ...counts,
+    };
+  });
+
   return c.json(rekap5Hari, 200);
 });
 
@@ -226,7 +295,7 @@ dashboardRouter.openapi(getRingkasanAbsensiRoute, async (c) => {
     {
       total_siswa: stats.total_siswa,
       total_kelas: stats.total_kelas,
-      tanggal: "Senin, 19 Oktober 2026",
+      tanggal: formatIndonesianDate(),
       hadir: stats.hadir,
       izin: stats.izin,
       sakit: stats.sakit,

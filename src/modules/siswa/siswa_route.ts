@@ -7,10 +7,15 @@ import {
   schedules,
   students,
   subject_attendance_records,
+  users,
 } from "../../config/schema";
 import { type DecodedAuthToken } from "../../middlewares/auth";
 import { API_TAGS } from "../../shared/constants";
 import { ErrorResponseSchema } from "../../shared/types/api";
+import {
+  deleteLocalAvatarIfOwned,
+  validateProfilePhotoValue,
+} from "../../shared/utils/upload";
 
 export const siswaRouter = new OpenAPIHono();
 
@@ -151,6 +156,14 @@ export const updateSiswaProfileRoute = createRoute({
         },
       },
     },
+    400: {
+      description: "Invalid profile photo",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
     404: {
       description: "Student not found",
       content: {
@@ -164,11 +177,19 @@ export const updateSiswaProfileRoute = createRoute({
 
 siswaRouter.openapi(updateSiswaProfileRoute, async (c) => {
   const body = c.req.valid("json");
+  if (body.foto_profil !== undefined) {
+    const validation = validateProfilePhotoValue(body.foto_profil);
+    if (!validation.valid) {
+      return c.json({ success: false, message: validation.error }, 400);
+    }
+  }
+
   const current = await getStudentFromContext(c);
   if (!current) {
     return c.json({ success: false, message: "Data siswa tidak ditemukan" }, 404);
   }
 
+  const previousFoto = current.foto_profil;
   const [updated] = await db
     .update(students)
     .set({
@@ -195,6 +216,17 @@ siswaRouter.openapi(updateSiswaProfileRoute, async (c) => {
     })
     .where(eq(students.id, current.id))
     .returning();
+
+  if (body.foto_profil !== undefined) {
+    await db
+      .update(users)
+      .set({ foto_profil: body.foto_profil, updated_at: new Date() })
+      .where(or(eq(users.student_id, current.id), eq(users.username, current.nisn)));
+
+    if (previousFoto && previousFoto !== body.foto_profil) {
+      await deleteLocalAvatarIfOwned(previousFoto);
+    }
+  }
 
   return c.json(formatStudentProfile(updated), 200);
 });

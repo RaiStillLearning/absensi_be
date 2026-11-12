@@ -24,3 +24,4 @@ Thumbs.db
 .pgdata/
 pgdata/
 .store_persistence.json
+uploads/
