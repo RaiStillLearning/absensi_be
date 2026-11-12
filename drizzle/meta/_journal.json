@@ -8,6 +8,13 @@
       "when": 1794409601161,
       "tag": "0000_dear_karnak",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794500883679,
+      "tag": "0001_auth_sessions",
+      "breakpoints": true
     }
   ]
 }

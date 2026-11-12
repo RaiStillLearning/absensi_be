@@ -1,49 +1,45 @@
 import type { z } from "@hono/zod-openapi";
-import { eq, or } from "drizzle-orm";
-import { sign } from "hono/jwt";
+import { eq, or, sql } from "drizzle-orm";
 import { db, ensureDatabaseInitialized } from "../../config/database";
 import { env } from "../../config/env";
 import { classes, class_students, students, teachers, users } from "../../config/schema";
 import { hashPassword, verifyPassword } from "../../shared/utils/hash";
 import type { AuthUserProfileSchema } from "./auth_schema";
+import {
+  ACCESS_TOKEN_TTL_SECONDS,
+  createSession,
+  revokeAllUserSessions,
+  signAccessToken,
+  type AuthRole,
+} from "./session_service";
+
+const GENERIC_LOGIN_ERROR =
+  "Kredensial login tidak valid. Periksa kembali NISN, NIP, Nama, Username, atau Password Anda.";
+
+export type AuthUserProfile = z.infer<typeof AuthUserProfileSchema>;
 
 export type LoginResult =
   | {
       status: "success";
+      session: {
+        id: string;
+        refreshToken: string;
+        expiresAt: Date;
+        rememberMe: boolean;
+      };
       data: {
         access_token: string;
-        refresh_token?: string;
         token_type: "Bearer";
-        user: {
-          id: string;
-          username: string;
-          role: string;
-          peran: string;
-          nama_lengkap: string;
-          email?: string;
-          foto_profil?: string;
-          isWalas?: boolean;
-          kelasWalas?: string;
-          kelas_diampu?: string;
-          mata_pelajaran?: string;
-          nip?: string;
-          nisn?: string;
-          kelas?: string;
-          jurusan?: string;
-          student?: {
-            id: string;
-            nisn: string;
-            full_name: string;
-            class_name: string;
-          };
-        };
+        expires_in: number;
+        remember_me: boolean;
+        session_expires_at: string;
+        user: AuthUserProfile;
       };
-      access_token?: string;
-      refresh_token?: string;
-      user?: any;
+      access_token: string;
+      user: AuthUserProfile;
     }
   | {
-      status: "invalid_credentials";
+      status: "invalid_credentials" | "ambiguous_identity";
       message: string;
     }
   | {
@@ -51,179 +47,39 @@ export type LoginResult =
       message: string;
     };
 
+export interface AuthenticateOptions {
+  rememberMe?: boolean;
+  userAgent?: string;
+  ipAddress?: string;
+}
+
 /**
- * Universal authentication service for Admin, Guru, Walas, and Siswa (100% PostgreSQL via Drizzle ORM).
- * All passwords must be cryptographically hashed in the `users` table.
+ * Resolve domain claims + public profile for a `users` row from PostgreSQL.
  */
-export async function authenticateUser(
-  usernameInput: string,
-  passwordInput: string
-): Promise<LoginResult> {
-  await ensureDatabaseInitialized();
-
-  const cleanUser = usernameInput.trim().toLowerCase();
-  const cleanPass = passwordInput.trim();
-  const cleanNip = cleanUser.replace(/\s+/g, "");
-
-  // 1. Query user from PostgreSQL `users` table
-  const found = await db
-    .select()
-    .from(users)
-    .where(
-      or(
-        eq(users.username, cleanUser),
-        eq(users.username, usernameInput.trim()),
-        eq(users.username, cleanNip)
-      )
-    )
-    .limit(1);
-
-  let dbUser = found[0];
-
-  // Jika belum ada di `users`, cek apakah guru ada di tabel `teachers` (auto-create user dengan password hash dari env)
-  if (!dbUser) {
-    const [matchedTeacher] = await db
-      .select()
-      .from(teachers)
-      .where(
-        or(
-          eq(teachers.nip, cleanNip),
-          eq(teachers.nip, usernameInput.trim()),
-          eq(teachers.email, cleanUser)
-        )
-      )
-      .limit(1);
-
-    if (matchedTeacher) {
-      const [existingUser] = await db
-        .select()
-        .from(users)
-        .where(eq(users.teacher_id, matchedTeacher.id))
-        .limit(1);
-
-      if (!existingUser) {
-        const defaultPassword = env.STUDENT_DEFAULT_PASSWORD;
-        const [newUser] = await db
-          .insert(users)
-          .values({
-            username: matchedTeacher.nip || `guru_${matchedTeacher.id}`,
-            password_hash: hashPassword(defaultPassword),
-            role: matchedTeacher.is_walas ? "walas" : "guru",
-            nama_lengkap: matchedTeacher.nama_guru,
-            email: matchedTeacher.email || "",
-            teacher_id: matchedTeacher.id,
-            is_active: true,
-          })
-          .returning();
-        dbUser = newUser;
-      } else {
-        dbUser = existingUser;
-      }
-    }
-
-    if (!dbUser) {
-      const [matchedStudent] = await db
-        .select()
-        .from(students)
-        .where(
-          or(
-            eq(students.nisn, cleanNip),
-            eq(students.nisn, usernameInput.trim()),
-            eq(students.email, cleanUser)
-          )
-        )
-        .limit(1);
-
-      if (matchedStudent) {
-        const [existingStudentUser] = await db
-          .select()
-          .from(users)
-          .where(eq(users.student_id, matchedStudent.id))
-          .limit(1);
-
-        if (!existingStudentUser) {
-          const defaultPassword = env.STUDENT_DEFAULT_PASSWORD;
-          const [newStudentUser] = await db
-            .insert(users)
-            .values({
-              username: matchedStudent.nisn,
-              password_hash: hashPassword(defaultPassword),
-              role: "siswa",
-              nama_lengkap: matchedStudent.full_name,
-              email: matchedStudent.email || "",
-              student_id: matchedStudent.id,
-              is_active: true,
-            })
-            .returning();
-          dbUser = newStudentUser;
-        } else {
-          dbUser = existingStudentUser;
-        }
-      }
-    }
-  }
-
-  if (!dbUser) {
-    return {
-      status: "invalid_credentials",
-      message: "Username atau password yang Anda masukkan tidak terdaftar.",
-    };
-  }
-
-  // 2. Verify cryptographic password hash from PostgreSQL
-  const isPasswordValid = verifyPassword(cleanPass, dbUser.password_hash);
-  if (!isPasswordValid) {
-    return {
-      status: "invalid_credentials",
-      message: "Password yang Anda masukkan tidak sesuai.",
-    };
-  }
-
-  if (!dbUser.is_active) {
-    return {
-      status: "inactive",
-      message: "Akun Anda berstatus non-aktif. Silakan hubungi administrator.",
-    };
-  }
-
-  const nowSec = Math.floor(Date.now() / 1000);
-  const accessExp = nowSec + 60 * 60 * 8; // 8 hours
-  const refreshExp = nowSec + 60 * 60 * 24 * 7; // 7 days
-
-  // Role Admin
+async function buildUserSessionContext(dbUser: typeof users.$inferSelect): Promise<{
+  sub: string;
+  role: AuthRole;
+  isWalas: boolean;
+  profile: AuthUserProfile;
+} | null> {
   if (dbUser.role === "admin") {
-    const payload = {
-      sub: dbUser.id,
-      username: dbUser.username,
-      role: "admin",
-      exp: accessExp,
-    };
-    const token = await sign(payload, env.JWT_SECRET);
-    const refreshToken = await sign({ ...payload, type: "refresh", exp: refreshExp }, env.JWT_SECRET);
-    const userProfile = {
-      id: dbUser.id,
-      username: dbUser.username,
-      role: "admin",
-      peran: "Administrator",
-      nama_lengkap: dbUser.nama_lengkap || "",
-      email: dbUser.email || "",
-      foto_profil: dbUser.foto_profil || "",
-    };
     return {
-      status: "success",
-      data: {
-        access_token: token,
-        refresh_token: refreshToken,
-        token_type: "Bearer",
-        user: userProfile,
+      sub: dbUser.id,
+      role: "admin",
+      isWalas: false,
+      profile: {
+        id: dbUser.id,
+        username: dbUser.username,
+        role: "admin",
+        peran: "Administrator",
+        nama_lengkap: dbUser.nama_lengkap || "",
+        email: dbUser.email || "",
+        foto_profil: dbUser.foto_profil || "",
+        must_change_password: Boolean(dbUser.must_change_password),
       },
-      access_token: token,
-      refresh_token: refreshToken,
-      user: userProfile,
     };
   }
 
-  // Role Guru / Walas
   if (dbUser.role === "guru" || dbUser.role === "walas") {
     let teacherRow: typeof teachers.$inferSelect | undefined;
     if (dbUser.teacher_id) {
@@ -243,54 +99,33 @@ export async function authenticateUser(
       teacherRow = byNip;
     }
 
-    if (!teacherRow) {
-      return {
-        status: "invalid_credentials",
-        message: "Data guru tidak ditemukan. Hubungi administrator.",
-      };
-    }
+    if (!teacherRow) return null;
 
     const isWalas = Boolean(teacherRow.is_walas) || dbUser.role === "walas";
     const kelasWalas = teacherRow.kelas_walas || "";
+    const resolvedRole: AuthRole = dbUser.role === "walas" ? "walas" : "guru";
 
-    const payload = {
-      sub: String(teacherRow.id),
-      username: dbUser.username,
-      role: "guru",
-      isWalas,
-      exp: accessExp,
-    };
-    const token = await sign(payload, env.JWT_SECRET);
-    const refreshToken = await sign({ ...payload, type: "refresh", exp: refreshExp }, env.JWT_SECRET);
-    const userProfile = {
-      id: String(teacherRow.id),
-      username: dbUser.username,
-      role: "guru",
-      peran: "Guru",
-      nama_lengkap: teacherRow.nama_guru || dbUser.nama_lengkap || "",
-      email: teacherRow.email || dbUser.email || "",
-      mata_pelajaran: teacherRow.mata_pelajaran,
-      nip: teacherRow.nip || "",
-      isWalas,
-      kelasWalas,
-      kelas_diampu: kelasWalas,
-      foto_profil: teacherRow.foto_profil || "",
-    };
     return {
-      status: "success",
-      data: {
-        access_token: token,
-        refresh_token: refreshToken,
-        token_type: "Bearer",
-        user: userProfile,
+      sub: String(teacherRow.id),
+      role: resolvedRole,
+      isWalas,
+      profile: {
+        id: String(teacherRow.id),
+        username: dbUser.username,
+        role: "guru",
+        peran: isWalas ? "Wali Kelas" : "Guru",
+        nama_lengkap: teacherRow.nama_guru || dbUser.nama_lengkap || "",
+        email: teacherRow.email || dbUser.email || "",
+        mata_pelajaran: teacherRow.mata_pelajaran,
+        foto_profil: teacherRow.foto_profil || "",
+        isWalas,
+        kelasWalas,
+        must_change_password: Boolean(dbUser.must_change_password),
       },
-      access_token: token,
-      refresh_token: refreshToken,
-      user: userProfile,
     };
   }
 
-  // Role Siswa
+  // Siswa
   let studentRow: typeof students.$inferSelect | undefined;
   if (dbUser.student_id) {
     const [s] = await db
@@ -308,13 +143,7 @@ export async function authenticateUser(
       .limit(1);
     studentRow = s;
   }
-
-  if (!studentRow) {
-    return {
-      status: "invalid_credentials",
-      message: "Data siswa tidak ditemukan. Hubungi administrator.",
-    };
-  }
+  if (!studentRow) return null;
 
   let className = studentRow.kelas;
   const [enrollment] = await db
@@ -327,62 +156,343 @@ export async function authenticateUser(
     className = enrollment.class_name;
   }
 
-  const payload = {
-    sub: studentRow.nisn,
-    username: dbUser.username,
-    role: "siswa",
-    exp: accessExp,
-  };
-  const token = await sign(payload, env.JWT_SECRET);
-  const refreshToken = await sign({ ...payload, type: "refresh", exp: refreshExp }, env.JWT_SECRET);
-  const userProfile = {
-    id: dbUser.id,
-    username: dbUser.username,
-    role: "siswa",
-    peran: "Siswa",
-    nama_lengkap: studentRow.full_name,
-    email: studentRow.email,
-    nisn: studentRow.nisn,
-    kelas: className,
-    jurusan: studentRow.jurusan,
-    foto_profil: studentRow.foto_profil || "",
-    student: {
-      id: studentRow.id,
-      nisn: studentRow.nisn,
-      full_name: studentRow.full_name,
-      class_name: className,
-    },
-  };
   return {
-    status: "success",
-    data: {
-      access_token: token,
-      refresh_token: refreshToken,
-      token_type: "Bearer",
-      user: userProfile,
+    sub: studentRow.nisn,
+    role: "siswa",
+    isWalas: false,
+    profile: {
+      id: dbUser.id,
+      username: dbUser.username,
+      role: "siswa",
+      peran: "Siswa",
+      nama_lengkap: studentRow.full_name,
+      email: studentRow.email,
+      nisn: studentRow.nisn,
+      kelas: className,
+      jurusan: studentRow.jurusan,
+      foto_profil: studentRow.foto_profil || "",
+      must_change_password: Boolean(dbUser.must_change_password),
+      student: {
+        id: studentRow.id,
+        nisn: studentRow.nisn,
+        full_name: studentRow.full_name,
+        class_name: className,
+      },
     },
-    access_token: token,
-    refresh_token: refreshToken,
-    user: userProfile,
   };
 }
 
-export type AuthUserProfile = z.infer<typeof AuthUserProfileSchema>;
+/**
+ * Universal authentication service for Admin, Guru, Walas, and Siswa.
+ * Mendukung login siswa menggunakan NISN atau Nama Siswa (menolak nama ganda dengan instruksi pakai NISN).
+ */
+export async function authenticateUser(
+  usernameInput: string,
+  passwordInput: string,
+  options: AuthenticateOptions = {}
+): Promise<LoginResult> {
+  await ensureDatabaseInitialized();
+
+  const trimmedInput = usernameInput.trim();
+  const collapsedInput = trimmedInput.replace(/\s+/g, " ");
+  const cleanUser = trimmedInput.toLowerCase();
+  const cleanNip = cleanUser.replace(/\s+/g, "");
+  const cleanPass = passwordInput.trim();
+
+  if (!trimmedInput || !cleanPass) {
+    return { status: "invalid_credentials", message: GENERIC_LOGIN_ERROR };
+  }
+
+  // 1. Cari langsung di tabel `users` berdasarkan username exact (admin, NIP, NISN)
+  const found = await db
+    .select()
+    .from(users)
+    .where(
+      or(
+        eq(users.username, cleanUser),
+        eq(users.username, trimmedInput),
+        eq(users.username, cleanNip)
+      )
+    )
+    .limit(1);
+
+  let dbUser = found[0];
+
+  // 2. Jika belum cocok di `users`, cek `teachers` berdasarkan NIP / email
+  if (!dbUser) {
+    const [matchedTeacher] = await db
+      .select()
+      .from(teachers)
+      .where(
+        or(
+          eq(teachers.nip, cleanNip),
+          eq(teachers.nip, trimmedInput),
+          eq(teachers.email, cleanUser)
+        )
+      )
+      .limit(1);
+
+    if (matchedTeacher) {
+      const [existingUser] = await db
+        .select()
+        .from(users)
+        .where(eq(users.teacher_id, matchedTeacher.id))
+        .limit(1);
+
+      if (!existingUser) {
+        const defaultTeacherPwd = env.TEACHER_DEFAULT_PASSWORD || "guru123";
+        const [newUser] = await db
+          .insert(users)
+          .values({
+            username: matchedTeacher.nip || `guru_${matchedTeacher.id}`,
+            password_hash: hashPassword(defaultTeacherPwd),
+            role: matchedTeacher.is_walas ? "walas" : "guru",
+            nama_lengkap: matchedTeacher.nama_guru,
+            email: matchedTeacher.email || "",
+            teacher_id: matchedTeacher.id,
+            is_active: true,
+          })
+          .returning();
+        dbUser = newUser;
+      } else {
+        dbUser = existingUser;
+      }
+    }
+  }
+
+  // 3. Jika masih belum ketemu, cari siswa berdasarkan NISN / email, lalu Nama Siswa
+  if (!dbUser) {
+    let matchedStudent: typeof students.$inferSelect | undefined;
+
+    const [byNisnOrEmail] = await db
+      .select()
+      .from(students)
+      .where(
+        or(
+          eq(students.nisn, cleanNip),
+          eq(students.nisn, trimmedInput),
+          eq(students.email, cleanUser)
+        )
+      )
+      .limit(1);
+
+    if (byNisnOrEmail) {
+      matchedStudent = byNisnOrEmail;
+    } else {
+      // Pencarian nama siswa (case-insensitive & normalisasi spasi), cek hingga 2 baris untuk deteksi nama identik
+      const normalizedQueryName = collapsedInput.toLowerCase();
+      const matchedByName = await db
+        .select()
+        .from(students)
+        .where(
+          sql`lower(regexp_replace(trim(${students.full_name}), '[[:space:]]+', ' ', 'g')) = ${normalizedQueryName}`
+        )
+        .limit(2);
+
+      if (matchedByName.length > 1) {
+        return {
+          status: "ambiguous_identity",
+          message:
+            "Ditemukan lebih dari satu akun siswa dengan nama tersebut. Silakan login menggunakan NISN.",
+        };
+      }
+
+      if (matchedByName.length === 1) {
+        matchedStudent = matchedByName[0];
+      }
+    }
+
+    if (matchedStudent) {
+      const [existingStudentUser] = await db
+        .select()
+        .from(users)
+        .where(eq(users.student_id, matchedStudent.id))
+        .limit(1);
+
+      if (!existingStudentUser) {
+        const defaultStudentPwd = env.STUDENT_DEFAULT_PASSWORD || "gc123";
+        const [newStudentUser] = await db
+          .insert(users)
+          .values({
+            username: matchedStudent.nisn,
+            password_hash: hashPassword(defaultStudentPwd),
+            role: "siswa",
+            nama_lengkap: matchedStudent.full_name,
+            email: matchedStudent.email || "",
+            student_id: matchedStudent.id,
+            must_change_password: true,
+            is_active: true,
+          })
+          .returning();
+        dbUser = newStudentUser;
+      } else {
+        dbUser = existingStudentUser;
+      }
+    }
+  }
+
+  if (!dbUser) {
+    return { status: "invalid_credentials", message: GENERIC_LOGIN_ERROR };
+  }
+
+  // Verifikasi hash password (tidak pernah mengirim atau mengecek plaintext)
+  const isPasswordValid = verifyPassword(cleanPass, dbUser.password_hash);
+  if (!isPasswordValid) {
+    return { status: "invalid_credentials", message: GENERIC_LOGIN_ERROR };
+  }
+
+  if (!dbUser.is_active) {
+    return {
+      status: "inactive",
+      message: "Akun Anda berstatus non-aktif. Silakan hubungi administrator.",
+    };
+  }
+
+  const context = await buildUserSessionContext(dbUser);
+  if (!context) {
+    return { status: "invalid_credentials", message: GENERIC_LOGIN_ERROR };
+  }
+
+  const rememberMe = Boolean(options.rememberMe);
+  const session = await createSession({
+    userId: dbUser.id,
+    rememberMe,
+    userAgent: options.userAgent,
+    ipAddress: options.ipAddress,
+  });
+
+  const { token } = await signAccessToken({
+    sub: context.sub,
+    uid: dbUser.id,
+    sid: session.sessionId,
+    username: dbUser.username,
+    role: context.role,
+    isWalas: context.isWalas,
+  });
+
+  const data = {
+    access_token: token,
+    token_type: "Bearer" as const,
+    expires_in: ACCESS_TOKEN_TTL_SECONDS,
+    remember_me: rememberMe,
+    session_expires_at: session.expiresAt.toISOString(),
+    user: context.profile,
+  };
+
+  return {
+    status: "success",
+    session: {
+      id: session.sessionId,
+      refreshToken: session.refreshToken,
+      expiresAt: session.expiresAt,
+      rememberMe,
+    },
+    data,
+    access_token: token,
+    user: context.profile,
+  };
+}
 
 /**
- * Get profile of user by decoded JWT payload (`sub` & `role`) from PostgreSQL
+ * Terbitkan Access Token baru (15 menit) untuk sesi yang sudah tervalidasi (saat Refresh).
+ */
+export async function issueAccessTokenForUser(
+  userId: string,
+  sessionId: string
+): Promise<{ accessToken: string; user: AuthUserProfile } | null> {
+  await ensureDatabaseInitialized();
+
+  const [dbUser] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (!dbUser || !dbUser.is_active) return null;
+
+  const context = await buildUserSessionContext(dbUser);
+  if (!context) return null;
+
+  const { token } = await signAccessToken({
+    sub: context.sub,
+    uid: dbUser.id,
+    sid: sessionId,
+    username: dbUser.username,
+    role: context.role,
+    isWalas: context.isWalas,
+  });
+
+  return { accessToken: token, user: context.profile };
+}
+
+/**
+ * Ganti password pengguna (siswa/guru/admin). Setelah diganti, password default tidak berlaku lagi.
+ */
+export async function changeUserPassword(input: {
+  userId: string;
+  sessionId: string;
+  currentPassword: string;
+  newPassword: string;
+}): Promise<{ ok: true } | { ok: false; status: 400 | 404; message: string }> {
+  await ensureDatabaseInitialized();
+
+  const [dbUser] = await db.select().from(users).where(eq(users.id, input.userId)).limit(1);
+  if (!dbUser) {
+    return { ok: false, status: 404, message: "Akun pengguna tidak ditemukan." };
+  }
+
+  if (!verifyPassword(input.currentPassword.trim(), dbUser.password_hash)) {
+    return { ok: false, status: 400, message: "Password saat ini tidak sesuai." };
+  }
+
+  const trimmedNew = input.newPassword.trim();
+  const defaultPwd = env.STUDENT_DEFAULT_PASSWORD || "gc123";
+  if (trimmedNew === defaultPwd) {
+    return {
+      ok: false,
+      status: 400,
+      message: "Password baru tidak boleh sama dengan password default sekolah.",
+    };
+  }
+  if (verifyPassword(trimmedNew, dbUser.password_hash)) {
+    return {
+      ok: false,
+      status: 400,
+      message: "Password baru harus berbeda dari password saat ini.",
+    };
+  }
+
+  await db
+    .update(users)
+    .set({
+      password_hash: hashPassword(trimmedNew),
+      must_change_password: false,
+      password_changed_at: new Date(),
+      updated_at: new Date(),
+    })
+    .where(eq(users.id, dbUser.id));
+
+  // Cabut sesi perangkat/tab lain demi keamanan
+  await revokeAllUserSessions(dbUser.id, "password_changed", input.sessionId);
+
+  return { ok: true };
+}
+
+/**
+ * Get profile of user by decoded JWT payload (`uid` / `sub` & `role`) from PostgreSQL
  */
 export async function getUserProfile(
   userId: string,
-  role: string
+  role: string,
+  uid?: string
 ): Promise<AuthUserProfile | null> {
   await ensureDatabaseInitialized();
 
+  if (uid) {
+    const [dbUser] = await db.select().from(users).where(eq(users.id, uid)).limit(1);
+    if (dbUser) {
+      const ctx = await buildUserSessionContext(dbUser);
+      if (ctx) return ctx.profile;
+    }
+  }
+
   if (role === "admin") {
-    const [adminById] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-    const adminUser =
-      adminById ||
-      (await db.select().from(users).where(eq(users.role, "admin")).limit(1))[0];
+    const [adminUser] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!adminUser) return null;
     return {
       id: adminUser.id,
@@ -392,6 +502,7 @@ export async function getUserProfile(
       nama_lengkap: adminUser.nama_lengkap || "",
       email: adminUser.email || "",
       foto_profil: adminUser.foto_profil || "",
+      must_change_password: Boolean(adminUser.must_change_password),
     };
   }
 
@@ -407,7 +518,7 @@ export async function getUserProfile(
       id: String(guru.id),
       username: guru.nip || "guru",
       role: "guru",
-      peran: "Guru",
+      peran: guru.is_walas ? "Wali Kelas" : "Guru",
       nama_lengkap: guru.nama_guru,
       email: guru.email || "",
       mata_pelajaran: guru.mata_pelajaran,
@@ -441,12 +552,17 @@ export async function getUserProfile(
     kelas: studentRow.kelas,
     jurusan: studentRow.jurusan,
     foto_profil: studentRow.foto_profil || "",
+    student: {
+      id: studentRow.id,
+      nisn: studentRow.nisn,
+      full_name: studentRow.full_name,
+      class_name: studentRow.kelas,
+    },
   };
 }
 
 /**
  * Updates `foto_profil` across both `users` and the role-specific table (`teachers` / `students`).
- * Returns the previous photo URL so callers can safely clean up orphaned files.
  */
 export async function updateUserProfilePhoto(
   userId: string,
@@ -460,9 +576,6 @@ export async function updateUserProfilePhoto(
     let [adminUser] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!adminUser && username) {
       [adminUser] = await db.select().from(users).where(eq(users.username, username)).limit(1);
-    }
-    if (!adminUser) {
-      [adminUser] = await db.select().from(users).where(eq(users.role, "admin")).limit(1);
     }
     if (!adminUser) return null;
 

@@ -20,8 +20,16 @@ const envSchema = z
     // ← WAJIB DIISI, TIDAK ADA DEFAULT
     DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
     JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 characters"),
-    STUDENT_DEFAULT_PASSWORD: z.string().min(6, "STUDENT_DEFAULT_PASSWORD is required"),
+    STUDENT_DEFAULT_PASSWORD: z.string().min(5, "STUDENT_DEFAULT_PASSWORD is required"),
     POSTGRES_PASSWORD: z.string().min(1, "POSTGRES_PASSWORD is required"),
+
+    // Password default akun guru yang dibuat otomatis (fallback ke STUDENT_DEFAULT_PASSWORD)
+    TEACHER_DEFAULT_PASSWORD: z.string().min(5).optional(),
+
+    // ← Masa berlaku token & sesi (detik). Default sesuai kebijakan keamanan sekolah.
+    ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(15 * 60), // 15 menit
+    SESSION_TTL_SECONDS: z.coerce.number().int().positive().default(24 * 60 * 60), // 24 jam
+    REMEMBER_ME_TTL_SECONDS: z.coerce.number().int().positive().default(7 * 24 * 60 * 60), // 7 hari
 
     // ← Boleh punya default (non-sensitif)
     CORS_ORIGIN: z.string().default("http://localhost:5173"),

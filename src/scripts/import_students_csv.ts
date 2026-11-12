@@ -134,8 +134,8 @@ export async function importStudentsFromCsv(
     errors: [],
   };
 
-  // Pre-hash default student password with bcrypt cost 10
-  const defaultPassword = env.STUDENT_DEFAULT_PASSWORD || "Ghama123!";
+  // Pre-hash default student password
+  const defaultPassword = env.STUDENT_DEFAULT_PASSWORD || "gc123";
   const passwordHash = hashPassword(defaultPassword);
 
   // Track unique classes to cache class records
@@ -372,6 +372,7 @@ export async function importStudentsFromCsv(
           password_hash: passwordHash,
           role: "siswa",
           student_id: studentId,
+          must_change_password: true,
           is_active: true,
         });
         summary.users_created++;

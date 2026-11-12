@@ -365,7 +365,7 @@ guruRouter.openapi(createGuruRoute, async (c) => {
         nama_lengkap: inserted.nama_guru,
         email: inserted.email || "",
         teacher_id: inserted.id,
-        password_hash: hashPassword(env.STUDENT_DEFAULT_PASSWORD),
+        password_hash: hashPassword(env.TEACHER_DEFAULT_PASSWORD || "guru123"),
         is_active: true,
       })
       .onConflictDoNothing();

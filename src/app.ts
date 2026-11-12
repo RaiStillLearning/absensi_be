@@ -5,6 +5,7 @@ import { logger } from "hono/logger";
 import { trimTrailingSlash } from "hono/trailing-slash";
 import { ensureDatabaseInitialized } from "./config/database";
 import { env } from "./config/env";
+import { csrfProtection, enforceHttps } from "./middlewares/auth";
 import { errorHandler, notFoundHandler } from "./middlewares/error-handler";
 import { dev_scanner_router } from "./modules/dev/scanner_test_route";
 import { apiV1Router, healthRoute } from "./routes";
@@ -34,6 +35,7 @@ export const app = new OpenAPIHono({
 // Global Middlewares
 app.use("*", trimTrailingSlash());
 app.use("*", logger());
+app.use("*", enforceHttps());
 app.use("*", async (_c, next) => {
   await ensureDatabaseInitialized();
   await next();
@@ -55,10 +57,21 @@ app.use(
       return null;
     },
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization"],
+    allowHeaders: ["Content-Type", "Authorization", "X-CSRF-Token"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
     credentials: true,
+  })
+);
+
+// Proteksi CSRF untuk request mutasi berbasis cookie (kecuali endpoint login awal dan scanner API non-cookie)
+app.use(
+  "/api/v1/*",
+  csrfProtection({
+    exemptPaths: [
+      /^\/api\/v1\/auth\/(?:login|guru\/login|siswa\/login)$/,
+      /^\/api\/v1\/attendance\/daily\/scan$/,
+    ],
   })
 );
 

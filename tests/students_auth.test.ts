@@ -132,16 +132,16 @@ describe("Integrasi Siswa & Autentikasi NISN — SMK Ghama Caraka", () => {
 
     const body = (await res.json()) as any;
     expect(body.success).toBe(false);
-    expect(body.message).toContain("tidak sesuai");
+    expect(body.message).toContain("tidak valid");
   });
 
-  it("7. Login ditolak dengan HTTP 401 jika NISN tidak terdaftar", async () => {
+  it("7. Login ditolak dengan HTTP 401 jika NISN tidak terdaftar (pesan error sama, tidak membocorkan eksistensi akun)", async () => {
     const res = await app.request("/api/v1/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         username: "0000000000",
-        password: "Ghama123!",
+        password: "gc123",
       }),
     });
 

@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { closeDatabaseConnection, db, ensureDatabaseInitialized } from "../config/database";
+import { env } from "../config/env";
 import {
   classes,
   class_students,
@@ -22,7 +23,7 @@ export async function seedAll() {
     { username: "admin", role: "admin", pass: "admin123" },
     { username: "walas", role: "walas", pass: "walas123" },
     { username: "guru", role: "guru", pass: "guru123" },
-    { username: "siswa", role: "siswa", pass: "siswa123" },
+    { username: "siswa", role: "siswa", pass: env.STUDENT_DEFAULT_PASSWORD || "gc123" },
   ];
 
   for (const acc of defaultAccounts) {
@@ -183,7 +184,8 @@ export async function seedAll() {
         username: s.nisn,
         role: "siswa",
         student_id: student.id,
-        password_hash: hashPassword("siswa123"),
+        password_hash: hashPassword(env.STUDENT_DEFAULT_PASSWORD || "gc123"),
+        must_change_password: true,
         is_active: true,
       });
     }

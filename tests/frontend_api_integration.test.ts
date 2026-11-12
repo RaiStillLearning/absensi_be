@@ -49,7 +49,7 @@ async function runTests() {
   const siswaLogin = await testEndpoint("Siswa Login", "/api/v1/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ nisn_atau_username: "0102641001", kata_sandi: "siswa123" }),
+    body: JSON.stringify({ nisn_atau_username: "0102641001", kata_sandi: process.env.STUDENT_DEFAULT_PASSWORD || "gc123" }),
   });
   const siswaHeaders: Record<string, string> = siswaLogin?.access_token ? { Authorization: `Bearer ${siswaLogin.access_token}` } : {};
 

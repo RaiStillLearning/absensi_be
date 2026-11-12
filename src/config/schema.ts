@@ -1,6 +1,7 @@
 import {
   boolean,
   date,
+  index,
   integer,
   pgTable,
   serial,
@@ -107,9 +108,44 @@ export const users = pgTable("users", {
   student_id: uuid("student_id").references(() => students.id, { onDelete: "cascade" }),
   teacher_id: integer("teacher_id"),
   is_active: boolean("is_active").default(true).notNull(),
+  /** True selama akun masih memakai password default (wajib diganti setelah login pertama). */
+  must_change_password: boolean("must_change_password").default(false).notNull(),
+  /** Waktu terakhir pengguna mengganti password secara mandiri. */
+  password_changed_at: timestamp("password_changed_at", { withTimezone: true }),
   created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+/**
+ * 5b. Auth Sessions Table
+ * Satu baris = satu sesi login (per perangkat/browser).
+ * Refresh token disimpan sebagai hash SHA-256 (tidak pernah plaintext) dan dirotasi setiap refresh.
+ * `expires_at` adalah batas absolut sesi (24 jam, atau 7 hari bila Remember Me).
+ */
+export const auth_sessions = pgTable(
+  "auth_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    user_id: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    refresh_token_hash: varchar("refresh_token_hash", { length: 64 }).notNull().unique(),
+    previous_refresh_token_hash: varchar("previous_refresh_token_hash", { length: 64 }),
+    remember_me: boolean("remember_me").default(false).notNull(),
+    expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
+    rotated_at: timestamp("rotated_at", { withTimezone: true }),
+    last_used_at: timestamp("last_used_at", { withTimezone: true }).defaultNow().notNull(),
+    revoked_at: timestamp("revoked_at", { withTimezone: true }),
+    revoked_reason: varchar("revoked_reason", { length: 50 }),
+    user_agent: varchar("user_agent", { length: 255 }).default(""),
+    ip_address: varchar("ip_address", { length: 64 }).default(""),
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("auth_sessions_user_idx").on(t.user_id),
+    index("auth_sessions_prev_hash_idx").on(t.previous_refresh_token_hash),
+  ]
+);
 
 /**
  * 6. Class Students Relation Table

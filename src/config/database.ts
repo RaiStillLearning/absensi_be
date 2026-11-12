@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
-import { count, eq } from "drizzle-orm";
+import { and, count, eq, isNull } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import { migrate as migratePglite } from "drizzle-orm/pglite/migrator";
@@ -19,7 +19,7 @@ import {
   initialSiswaProfile,
 } from "../shared/data/initial_data";
 import { initialWalasSiswaList } from "../shared/data/store";
-import { hashPassword } from "../shared/utils/hash";
+import { hashPassword, verifyPassword } from "../shared/utils/hash";
 import { env } from "./env";
 import * as schema from "./schema";
 
@@ -456,6 +456,7 @@ async function runMigrationsAndSeed(): Promise<void> {
         })
         .onConflictDoNothing();
 
+      const defaultStudentPwd = env.STUDENT_DEFAULT_PASSWORD || "gc123";
       await db
         .insert(schema.users)
         .values([
@@ -465,7 +466,8 @@ async function runMigrationsAndSeed(): Promise<void> {
             nama_lengkap: mainStudent.full_name,
             email: mainStudent.email,
             student_id: mainStudent.id,
-            password_hash: hashPassword("siswa123"),
+            password_hash: hashPassword(defaultStudentPwd),
+            must_change_password: true,
             is_active: true,
           },
           {
@@ -474,7 +476,8 @@ async function runMigrationsAndSeed(): Promise<void> {
             nama_lengkap: mainStudent.full_name,
             email: mainStudent.email,
             student_id: mainStudent.id,
-            password_hash: hashPassword("siswa123"),
+            password_hash: hashPassword(defaultStudentPwd),
+            must_change_password: true,
             is_active: true,
           },
         ])
@@ -544,7 +547,8 @@ async function runMigrationsAndSeed(): Promise<void> {
             role: "siswa",
             nama_lengkap: st.full_name,
             student_id: st.id,
-            password_hash: hashPassword("siswa123"),
+            password_hash: hashPassword(env.STUDENT_DEFAULT_PASSWORD || "gc123"),
+            must_change_password: true,
             is_active: true,
           })
           .onConflictDoNothing();
@@ -643,7 +647,8 @@ async function runMigrationsAndSeed(): Promise<void> {
               role: "siswa",
               nama_lengkap: st.full_name,
               student_id: st.id,
-              password_hash: hashPassword("siswa123"),
+              password_hash: hashPassword(env.STUDENT_DEFAULT_PASSWORD || "gc123"),
+              must_change_password: true,
               is_active: true,
             })
             .onConflictDoNothing();
@@ -662,6 +667,47 @@ async function runMigrationsAndSeed(): Promise<void> {
           catatan: item.catatan || "",
         });
       }
+    }
+  }
+
+  // 6. Sinkronkan akun siswa yang masih memakai password default lama ("siswa123" / "Ghama123!") ke default baru ("gc123")
+  // Hanya menyentuh akun siswa yang belum pernah mengganti password secara mandiri (`password_changed_at IS NULL`).
+  const targetDefaultPwd = env.STUDENT_DEFAULT_PASSWORD || "gc123";
+  const untouchedStudents = await db
+    .select({
+      id: schema.users.id,
+      password_hash: schema.users.password_hash,
+      must_change_password: schema.users.must_change_password,
+    })
+    .from(schema.users)
+    .where(
+      and(
+        eq(schema.users.role, "siswa"),
+        isNull(schema.users.password_changed_at),
+        eq(schema.users.must_change_password, false)
+      )
+    );
+
+  for (const stUser of untouchedStudents) {
+    const usesTargetDefault = verifyPassword(targetDefaultPwd, stUser.password_hash);
+    const usesLegacyDefault =
+      verifyPassword("siswa123", stUser.password_hash) ||
+      verifyPassword("Ghama123!", stUser.password_hash);
+
+    if (usesTargetDefault) {
+      await db
+        .update(schema.users)
+        .set({ must_change_password: true, updated_at: new Date() })
+        .where(eq(schema.users.id, stUser.id));
+    } else if (usesLegacyDefault) {
+      await db
+        .update(schema.users)
+        .set({
+          password_hash: hashPassword(targetDefaultPwd),
+          must_change_password: true,
+          updated_at: new Date(),
+        })
+        .where(eq(schema.users.id, stUser.id));
     }
   }
 }
