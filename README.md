@@ -255,6 +255,9 @@ bun run db:migrate
 # Memverifikasi konsistensi snapshot migrasi Drizzle
 bun run db:check
 
+# Reset skema PostgreSQL (public & drizzle) jika ingin mulai dari awal yang bersih
+bun run db:reset
+
 # Seed data dummy untuk pengujian scanner HC-P20
 bun run db:seed
 
@@ -269,11 +272,12 @@ bun run db:studio
 Agar skema database seluruh anggota tim selalu identik setiap kali melakukan `git pull`, ikuti aturan berikut:
 
 1. **Setelah `git pull`:**
-   - Cukup jalankan `bun run db:migrate` atau langsung `bun run dev`.
-   - Drizzle secara otomatis memeriksa tabel tracking `__drizzle_migrations` dan hanya menerapkan file migrasi baru yang belum dijalankan pada database lokal masing-masing (baik Docker PostgreSQL maupun fallback PGlite).
+   - Cukup jalankan `bun run dev` (atau `npm run dev:node`).
+   - `src/config/database.ts` secara otomatis menyinkronkan riwayat migrasi baseline jika tabel sudah ada di PostgreSQL Docker, dan menerapkan migrasi baru yang belum tercatat di `drizzle.__drizzle_migrations`.
 
-2. **Khusus Migrasi Pertama Kali dari Versi `DDL_SQL` Lama:**
-   - Jika database lokal Anda sebelumnya dibuat menggunakan `DDL_SQL` manual (sehingga tabel sudah ada tetapi belum memiliki tabel tracking `__drizzle_migrations`), lakukan reset volume database lokal **satu kali saja**:
+2. **Jika Ingin Reset Database Bersih dari Awal:**
+   - Jalankan `bun run db:reset` (atau `npm run db:reset`), lalu restart server dengan `bun run dev`. Database akan dimigrasi dan di-seed ulang secara otomatis.
+   - Atau lewat Docker:
      ```bash
      # Reset container & volume Docker PostgreSQL
      docker compose down -v && docker compose up -d

@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { count, eq } from "drizzle-orm";
+import { readMigrationFiles } from "drizzle-orm/migrator";
 import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import { migrate as migratePglite } from "drizzle-orm/pglite/migrator";
 import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
@@ -58,6 +59,108 @@ export const db: DrizzleDb = new Proxy({} as DrizzleDb, {
 
 let initPromise: Promise<void> | null = null;
 
+async function syncPostgresBaselineMigrationIfTablesExist(
+  client: ReturnType<typeof postgres>,
+  migrationsFolder: string
+): Promise<void> {
+  try {
+    const checkResult = await client`
+      SELECT count(*)::int as count 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+        AND table_name IN ('activity_logs', 'classes', 'users', 'teachers', 'students');
+    `;
+    const existingTableCount = checkResult[0]?.count ?? 0;
+
+    if (existingTableCount < 2) {
+      return;
+    }
+
+    const migrations = readMigrationFiles({ migrationsFolder });
+    const baseline = migrations[0];
+    if (!baseline) {
+      return;
+    }
+
+    await client`CREATE SCHEMA IF NOT EXISTS drizzle;`;
+    await client`
+      CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (
+        id SERIAL PRIMARY KEY,
+        hash text NOT NULL,
+        created_at bigint
+      );
+    `;
+
+    const existingMigrations = await client`
+      SELECT id, hash, created_at 
+      FROM drizzle.__drizzle_migrations 
+      WHERE created_at >= ${baseline.folderMillis} OR hash = ${baseline.hash}
+    `;
+
+    if (existingMigrations.length === 0) {
+      console.warn(
+        `⚠️ Terdeteksi ${existingTableCount} tabel inti sudah ada di PostgreSQL Docker, tetapi migrasi baseline (${baseline.hash.slice(0, 8)}...) belum tercatat di drizzle.__drizzle_migrations.`
+      );
+      console.log(
+        "🔄 Menyinkronkan riwayat migrasi baseline agar Drizzle tidak membuat ulang tabel yang sudah ada..."
+      );
+
+      await client`DELETE FROM drizzle.__drizzle_migrations WHERE created_at < ${baseline.folderMillis};`;
+      await client`
+        INSERT INTO drizzle.__drizzle_migrations ("hash", "created_at")
+        VALUES (${baseline.hash}, ${baseline.folderMillis});
+      `;
+      console.log("✅ Riwayat migrasi baseline berhasil disinkronkan.");
+    }
+  } catch (syncErr) {
+    console.warn("⚠️ Catatan sinkronisasi migrasi awal PostgreSQL:", syncErr);
+  }
+}
+
+async function syncPgliteBaselineMigrationIfTablesExist(
+  client: PGlite,
+  migrationsFolder: string
+): Promise<void> {
+  try {
+    const checkResult = await client.query<{ count: number }>(`
+      SELECT count(*)::int as count 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+        AND table_name IN ('activity_logs', 'classes', 'users', 'teachers', 'students');
+    `);
+    const existingTableCount = Number(checkResult.rows[0]?.count ?? 0);
+    if (existingTableCount < 2) return;
+
+    const migrations = readMigrationFiles({ migrationsFolder });
+    const baseline = migrations[0];
+    if (!baseline) return;
+
+    await client.exec(`
+      CREATE SCHEMA IF NOT EXISTS drizzle;
+      CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (
+        id SERIAL PRIMARY KEY,
+        hash text NOT NULL,
+        created_at bigint
+      );
+    `);
+
+    const existingMigrations = await client.query<{ id: number }>(
+      `SELECT id FROM drizzle.__drizzle_migrations WHERE created_at >= $1 OR hash = $2;`,
+      [baseline.folderMillis, baseline.hash]
+    );
+
+    if (existingMigrations.rows.length === 0) {
+      await client.query(`DELETE FROM drizzle.__drizzle_migrations WHERE created_at < $1;`, [baseline.folderMillis]);
+      await client.query(
+        `INSERT INTO drizzle.__drizzle_migrations ("hash", "created_at") VALUES ($1, $2);`,
+        [baseline.hash, baseline.folderMillis]
+      );
+    }
+  } catch (syncErr) {
+    console.warn("⚠️ Catatan sinkronisasi migrasi awal PGlite:", syncErr);
+  }
+}
+
 async function runMigrationsAndSeed(): Promise<void> {
   if (queryClient) {
     let isConnected = false;
@@ -77,25 +180,78 @@ async function runMigrationsAndSeed(): Promise<void> {
       pgliteClient = new PGlite(PG_DATA_DIR);
       const pgliteDb = drizzlePglite(pgliteClient, { schema });
       activeDb = pgliteDb as unknown as DrizzleDb;
-      await migratePglite(pgliteDb, { migrationsFolder: MIGRATIONS_FOLDER });
+      try {
+        await syncPgliteBaselineMigrationIfTablesExist(pgliteClient, MIGRATIONS_FOLDER);
+        await migratePglite(pgliteDb, { migrationsFolder: MIGRATIONS_FOLDER });
+      } catch (pgliteMigrationErr: any) {
+        const isDuplicate =
+          pgliteMigrationErr?.code === "42P07" ||
+          pgliteMigrationErr?.code === "42710" ||
+          String(pgliteMigrationErr?.message || "").includes("already exists");
+        if (!isDuplicate) throw pgliteMigrationErr;
+      }
     }
 
-    if (isConnected) {
+    if (isConnected && queryClient) {
       console.log("🐘 Terhubung ke External PostgreSQL (Docker PG). Menjalankan migrasi Drizzle...");
       try {
+        await syncPostgresBaselineMigrationIfTablesExist(queryClient, MIGRATIONS_FOLDER);
         await migratePostgres(activeDb, { migrationsFolder: MIGRATIONS_FOLDER });
-      } catch (migrationErr) {
-        console.error(
-          "❌ Gagal menjalankan migrasi Drizzle pada External PostgreSQL:",
-          migrationErr
-        );
-        throw migrationErr;
+      } catch (migrationErr: any) {
+        const isDuplicateRelation =
+          migrationErr?.code === "42P07" ||
+          migrationErr?.code === "42710" ||
+          String(migrationErr?.message || "").includes("already exists");
+
+        if (isDuplicateRelation && queryClient) {
+          console.warn(
+            "⚠️ Skema tabel sudah ada di PostgreSQL Docker (code 42P07 / duplicate relation). Menyelesaikan sinkronisasi migrasi baseline..."
+          );
+          try {
+            const migrations = readMigrationFiles({ migrationsFolder: MIGRATIONS_FOLDER });
+            const baseline = migrations[0];
+            if (baseline) {
+              await queryClient`CREATE SCHEMA IF NOT EXISTS drizzle;`;
+              await queryClient`
+                CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (
+                  id SERIAL PRIMARY KEY,
+                  hash text NOT NULL,
+                  created_at bigint
+                );
+              `;
+              await queryClient`DELETE FROM drizzle.__drizzle_migrations WHERE created_at < ${baseline.folderMillis};`;
+              await queryClient`
+                INSERT INTO drizzle.__drizzle_migrations ("hash", "created_at")
+                VALUES (${baseline.hash}, ${baseline.folderMillis});
+              `;
+            }
+            console.log("✅ Skema database PostgreSQL berhasil diverifikasi & disinkronkan.");
+          } catch (fallbackSyncErr) {
+            console.error("Gagal fallback sinkronisasi migrasi:", fallbackSyncErr);
+            throw migrationErr;
+          }
+        } else {
+          console.error(
+            "❌ Gagal menjalankan migrasi Drizzle pada External PostgreSQL:",
+            migrationErr
+          );
+          throw migrationErr;
+        }
       }
     }
   } else if (pgliteClient) {
     const pgliteDb = drizzlePglite(pgliteClient, { schema });
     activeDb = pgliteDb as unknown as DrizzleDb;
-    await migratePglite(pgliteDb, { migrationsFolder: MIGRATIONS_FOLDER });
+    try {
+      await syncPgliteBaselineMigrationIfTablesExist(pgliteClient, MIGRATIONS_FOLDER);
+      await migratePglite(pgliteDb, { migrationsFolder: MIGRATIONS_FOLDER });
+    } catch (pgliteMigrationErr: any) {
+      const isDuplicate =
+        pgliteMigrationErr?.code === "42P07" ||
+        pgliteMigrationErr?.code === "42710" ||
+        String(pgliteMigrationErr?.message || "").includes("already exists");
+      if (!isDuplicate) throw pgliteMigrationErr;
+    }
   }
 
   // 1. Seed Classes if empty
