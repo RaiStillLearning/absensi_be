@@ -116,7 +116,14 @@ export function rateLimitAuth(
       return;
     }
 
-    const key = `${scope}:${getClientIp(c)}`;
+    const clientIp = getClientIp(c);
+    const isLocal = clientIp === "127.0.0.1" || clientIp === "::1" || clientIp === "localhost";
+    if (env.APP_ENV !== "production" && isLocal) {
+      await next();
+      return;
+    }
+
+    const key = `${scope}:${clientIp}`;
     const now = Date.now();
     sweep(ipBuckets, now);
     const entry = ipBuckets.get(key);

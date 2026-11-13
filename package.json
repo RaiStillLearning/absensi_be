@@ -15,7 +15,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:check": "drizzle-kit check",
     "db:reset": "tsx src/scripts/reset_postgres.ts",
-    "db:seed": "bun src/scripts/seed_dummy_student.ts",
+    "db:seed": "tsx src/scripts/seed_database.ts",
+    "db:seed:scanner": "tsx src/scripts/seed_dummy_student.ts",
     "db:import:students": "bun src/scripts/import_students_csv.ts",
     "db:studio": "drizzle-kit studio",
     "docs:generate": "bun src/scripts/generate-openapi.ts"

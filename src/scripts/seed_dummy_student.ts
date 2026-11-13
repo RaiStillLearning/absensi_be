@@ -231,7 +231,12 @@ export async function seed_dummy_student() {
 }
 
 // Execute when run directly
-if (import.meta.main) {
+const isDirectRun = Boolean(
+  (typeof import.meta !== "undefined" && (import.meta as { main?: boolean }).main) ||
+    process.argv[1]?.includes("seed_dummy_student")
+);
+
+if (isDirectRun) {
   seed_dummy_student()
     .then(async () => {
       await closeDatabaseConnection();
