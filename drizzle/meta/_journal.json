@@ -15,6 +15,13 @@
       "when": 1794500883679,
       "tag": "0001_auth_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794587700000,
+      "tag": "0002_student_management_promotions",
+      "breakpoints": true
     }
   ]
 }

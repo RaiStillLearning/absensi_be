@@ -1,12 +1,14 @@
 import { app } from "./app";
 import { ensureDatabaseInitialized } from "./config/database";
 import { env } from "./config/env";
+import { startAutomaticPromotionScheduler } from "./modules/admin/siswa_admin_service";
 import { APP_CONSTANTS } from "./shared/constants";
 
 const port = env.APP_PORT;
 
 async function startServer() {
   await ensureDatabaseInitialized();
+  startAutomaticPromotionScheduler();
   if (typeof (globalThis as any).Bun !== "undefined") {
     (globalThis as any).Bun.serve({
       port,

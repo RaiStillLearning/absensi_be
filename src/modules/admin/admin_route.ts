@@ -2,15 +2,29 @@ import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { eq } from "drizzle-orm";
 import { db } from "../../config/database";
 import { users } from "../../config/schema";
-import { getAuthUser } from "../../middlewares/auth";
+import { getAuthUser, requireAuth } from "../../middlewares/auth";
 import { API_TAGS } from "../../shared/constants";
 import { ErrorResponseSchema } from "../../shared/types/api";
 import {
   deleteLocalAvatarIfOwned,
   validateProfilePhotoValue,
 } from "../../shared/utils/upload";
+import {
+  checkNisnAvailability,
+  createAdminStudent,
+  executeManualPromotion,
+  getAdminStudentDetail,
+  listAdminStudents,
+  listPromotionHistory,
+  previewManualPromotion,
+  runAutomaticPromotionJob,
+  updateAdminStudent,
+  uploadAdminStudentPhotoFile,
+} from "./siswa_admin_service";
 
 export const adminRouter = new OpenAPIHono();
+adminRouter.use("/siswa", requireAuth(["admin"]));
+adminRouter.use("/siswa/*", requireAuth(["admin"]));
 
 export const AdminProfileSchema = z
   .object({
@@ -164,4 +178,276 @@ adminRouter.openapi(updateAdminProfileRoute, async (c) => {
     },
     200
   );
+});
+
+/**
+ * ============================================================================
+ * MANAJEMEN SISWA (KHUSUS ADMIN)
+ * ============================================================================
+ */
+
+/**
+ * GET /api/v1/admin/siswa
+ * Daftar seluruh siswa dengan search (NISN/nama), filter kelas, filter status, dan pagination.
+ */
+adminRouter.get("/siswa", async (c) => {
+  const search = c.req.query("search") || "";
+  const kelas = c.req.query("kelas") || "";
+  const status = c.req.query("status") || "";
+  const page = Number(c.req.query("page") || 1);
+  const limit = Number(c.req.query("limit") || 10);
+
+  const result = await listAdminStudents({
+    search,
+    kelas,
+    status,
+    page,
+    limit,
+  });
+
+  return c.json(result, 200);
+});
+
+/**
+ * GET /api/v1/admin/siswa/check-nisn?nisn=...
+ * Memeriksa ketersediaan dan keunikan NISN sebelum menyimpan data siswa baru.
+ */
+adminRouter.get("/siswa/check-nisn", async (c) => {
+  const nisn = c.req.query("nisn") || "";
+  const check = await checkNisnAvailability(nisn);
+  return c.json(check, 200);
+});
+
+/**
+ * GET /api/v1/admin/siswa/riwayat-kenaikan
+ * Daftar riwayat kenaikan kelas seluruh siswa (Otomatis & Manual).
+ */
+adminRouter.get("/siswa/riwayat-kenaikan", async (c) => {
+  const search = c.req.query("search") || "";
+  const nisn = c.req.query("nisn") || "";
+  const jenis_proses = c.req.query("jenis_proses") || "";
+  const tahun_ajaran = c.req.query("tahun_ajaran") || "";
+  const kelas = c.req.query("kelas") || "";
+  const page = Number(c.req.query("page") || 1);
+  const limit = Number(c.req.query("limit") || 15);
+
+  const result = await listPromotionHistory({
+    search,
+    nisn,
+    jenis_proses,
+    tahun_ajaran,
+    kelas,
+    page,
+    limit,
+  });
+
+  return c.json(result, 200);
+});
+
+/**
+ * POST /api/v1/admin/siswa/kenaikan-kelas/preview
+ * Preview dampak kenaikan kelas manual sebelum dieksekusi.
+ */
+adminRouter.post("/siswa/kenaikan-kelas/preview", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const result = await previewManualPromotion({
+    from_class: String(body.from_class || body.kelas_asal || ""),
+    to_class: String(body.to_class || body.kelas_tujuan || ""),
+  });
+
+  if (!result.ok) {
+    return c.json(
+      {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: result.message,
+        },
+      },
+      result.status as 400
+    );
+  }
+
+  return c.json(result.data, 200);
+});
+
+/**
+ * POST /api/v1/admin/siswa/kenaikan-kelas/manual
+ * Eksekusi kenaikan kelas manual dengan transaksi dan validasi cooldown 6 bulan.
+ */
+adminRouter.post("/siswa/kenaikan-kelas/manual", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const authUser = getAuthUser(c);
+  const executedBy = authUser?.username || "Admin";
+
+  const result = await executeManualPromotion({
+    from_class: String(body.from_class || body.kelas_asal || ""),
+    to_class: String(body.to_class || body.kelas_tujuan || ""),
+    tahun_ajaran: body.tahun_ajaran ? String(body.tahun_ajaran) : undefined,
+    catatan: body.catatan || body.keterangan ? String(body.catatan || body.keterangan) : undefined,
+    executed_by: executedBy,
+    student_nisns: Array.isArray(body.student_nisns) ? body.student_nisns : undefined,
+  });
+
+  if (!result.ok) {
+    return c.json(
+      {
+        success: false,
+        error: {
+          code: result.status === 409 ? "PROMOTION_REJECTED" : "VALIDATION_ERROR",
+          message: result.message,
+        },
+        data: result.data,
+      },
+      result.status as 400 | 404 | 409
+    );
+  }
+
+  return c.json(result.data, 200);
+});
+
+/**
+ * POST /api/v1/admin/siswa/kenaikan-kelas/otomatis/trigger
+ * Endpoint pemicu scheduler kenaikan kelas otomatis (Mei = Lulus Kelas 12, Juni = Naik Kelas 10->11 & 11->12).
+ */
+adminRouter.post("/siswa/kenaikan-kelas/otomatis/trigger", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const refDate = body.reference_date ? new Date(String(body.reference_date)) : undefined;
+  if (refDate && Number.isNaN(refDate.getTime())) {
+    return c.json(
+      {
+        success: false,
+        error: {
+          code: "INVALID_DATE",
+          message: "Format reference_date tidak valid",
+        },
+      },
+      400
+    );
+  }
+
+  const res = await runAutomaticPromotionJob({
+    referenceDate: refDate,
+    forceRun: Boolean(body.force_run),
+  });
+
+  return c.json(res, 200);
+});
+
+/**
+ * POST /api/v1/admin/siswa
+ * Tambah siswa baru beserta pembuatan akun login siswa (password default gc123).
+ */
+adminRouter.post("/siswa", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const result = await createAdminStudent({
+    nisn: String(body.nisn || ""),
+    nama_lengkap: String(body.nama_lengkap || body.nama_siswa || ""),
+    kelas: String(body.kelas || ""),
+    jurusan: body.jurusan ? String(body.jurusan) : undefined,
+    foto_profil: body.foto_profil ? String(body.foto_profil) : undefined,
+    jenis_kelamin: body.jenis_kelamin ? String(body.jenis_kelamin) : undefined,
+  });
+
+  if (!result.ok) {
+    return c.json(
+      {
+        success: false,
+        error: {
+          code: result.status === 409 ? "DUPLICATE_NISN" : "VALIDATION_ERROR",
+          message: result.message,
+        },
+      },
+      result.status as 400 | 409
+    );
+  }
+
+  return c.json(result.data, 201);
+});
+
+/**
+ * GET /api/v1/admin/siswa/:nisn
+ * Detail siswa, informasi kartu identitas siswa, dan riwayat kenaikan kelas siswa.
+ */
+adminRouter.get("/siswa/:nisn", async (c) => {
+  const nisn = c.req.param("nisn");
+  const detail = await getAdminStudentDetail(nisn);
+  if (!detail) {
+    return c.json(
+      {
+        success: false,
+        error: {
+          code: "NOT_FOUND",
+          message: `Data siswa dengan NISN/ID "${nisn}" tidak ditemukan`,
+        },
+      },
+      404
+    );
+  }
+
+  return c.json(detail, 200);
+});
+
+/**
+ * PUT /api/v1/admin/siswa/:nisn
+ * Edit data siswa (Nama Lengkap, Kelas, Jurusan, Foto Profil). NISN bersifat READ-ONLY.
+ */
+adminRouter.put("/siswa/:nisn", async (c) => {
+  const nisn = c.req.param("nisn");
+  const body = await c.req.json().catch(() => ({}));
+
+  const result = await updateAdminStudent(nisn, body);
+  if (!result.ok) {
+    return c.json(
+      {
+        success: false,
+        error: {
+          code: result.status === 404 ? "NOT_FOUND" : "VALIDATION_ERROR",
+          message: result.message,
+        },
+      },
+      result.status as 400 | 404
+    );
+  }
+
+  return c.json(result.data, 200);
+});
+
+/**
+ * POST /api/v1/admin/siswa/:nisn/foto
+ * Upload foto profil siswa menggunakan multipart/form-data (maks 1MB, JPG/JPEG/PNG).
+ */
+adminRouter.post("/siswa/:nisn/foto", async (c) => {
+  const nisn = c.req.param("nisn");
+  const formData = await c.req.formData().catch(() => null);
+  const file = formData?.get("file") || formData?.get("foto");
+
+  if (!file || !(file instanceof File)) {
+    return c.json(
+      {
+        success: false,
+        error: {
+          code: "INVALID_FILE",
+          message: "File foto profil wajib diunggah",
+        },
+      },
+      400
+    );
+  }
+
+  const result = await uploadAdminStudentPhotoFile(nisn, file);
+  if (!result.ok) {
+    return c.json(
+      {
+        success: false,
+        error: {
+          code: result.status === 404 ? "NOT_FOUND" : "VALIDATION_ERROR",
+          message: result.message,
+        },
+      },
+      result.status as 400 | 404
+    );
+  }
+
+  return c.json(result, 200);
 });

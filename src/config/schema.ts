@@ -266,3 +266,51 @@ export const activity_logs = pgTable("activity_logs", {
   waktu: varchar("waktu", { length: 50 }).notNull(),
   created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+/**
+ * 12. Student Promotion Logs Table (Riwayat Kenaikan Kelas Siswa)
+ */
+export const student_promotion_logs = pgTable(
+  "student_promotion_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    batch_id: uuid("batch_id"),
+    student_id: uuid("student_id").references(() => students.id, {
+      onDelete: "set null",
+    }),
+    nisn: varchar("nisn", { length: 20 }).notNull(),
+    student_name: varchar("student_name", { length: 150 }).notNull(),
+    from_class: varchar("from_class", { length: 50 }).notNull(),
+    to_class: varchar("to_class", { length: 50 }).notNull(),
+    tahun_ajaran: varchar("tahun_ajaran", { length: 20 }).notNull(),
+    process_type: varchar("process_type", { length: 20 }).notNull(), // 'Otomatis' | 'Manual'
+    executed_by: varchar("executed_by", { length: 150 }).default("Admin").notNull(),
+    notes: text("notes").default(""),
+    promoted_at: timestamp("promoted_at", { withTimezone: true }).defaultNow().notNull(),
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("student_promotion_logs_nisn_idx").on(t.nisn),
+    index("student_promotion_logs_student_id_idx").on(t.student_id),
+    index("student_promotion_logs_promoted_at_idx").on(t.promoted_at),
+  ]
+);
+
+/**
+ * 13. Promotion Scheduler Runs Table (Idempotensi Kenaikan Kelas Otomatis per Periode)
+ */
+export const promotion_scheduler_runs = pgTable(
+  "promotion_scheduler_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    period_key: varchar("period_key", { length: 50 }).notNull().unique(),
+    tahun_ajaran: varchar("tahun_ajaran", { length: 20 }).notNull(),
+    process_type: varchar("process_type", { length: 30 }).notNull(),
+    total_processed: integer("total_processed").default(0).notNull(),
+    total_promoted: integer("total_promoted").default(0).notNull(),
+    total_rejected: integer("total_rejected").default(0).notNull(),
+    executed_at: timestamp("executed_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("promotion_scheduler_runs_period_key_idx").on(t.period_key)]
+);
+
