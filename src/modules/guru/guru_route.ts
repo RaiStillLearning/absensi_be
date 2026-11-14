@@ -11,7 +11,7 @@ import {
   teachers,
   users,
 } from "../../config/schema";
-import { type DecodedAuthToken } from "../../middlewares/auth";
+import { requireAuth, type DecodedAuthToken } from "../../middlewares/auth";
 import { API_TAGS } from "../../shared/constants";
 import { ErrorResponseSchema } from "../../shared/types/api";
 import { hashPassword } from "../../shared/utils/hash";
@@ -21,6 +21,19 @@ import {
 } from "../../shared/utils/upload";
 
 export const guruRouter = new OpenAPIHono();
+
+// Otorisasi RBAC: Menambah, mengubah master data guru lain, dan menghapus guru hanya boleh dilakukan oleh Admin
+guruRouter.use("*", async (c, next) => {
+  const path = c.req.path;
+  const method = c.req.method;
+  if (method === "POST" && (path === "/api/v1/guru" || path === "/api/v1/guru/")) {
+    return requireAuth(["admin"])(c, next);
+  }
+  if (["PUT", "DELETE"].includes(method) && /^\/api\/v1\/guru\/\d+$/.test(path)) {
+    return requireAuth(["admin"])(c, next);
+  }
+  return next();
+});
 
 export const GuruItemSchema = z
   .object({
@@ -453,19 +466,18 @@ guruRouter.openapi(updateGuruProfileRoute, async (c) => {
   }
 
   const previousFoto = current.foto_profil;
+  // Keamanan RBAC: Guru tidak boleh mengubah NIP (identitas login) atau mata pelajaran secara mandiri
   const [updated] = await db
     .update(teachers)
     .set({
       nama_guru: body.nama_lengkap ?? current.nama_guru,
       nama_panggilan: body.nama_panggilan ?? current.nama_panggilan,
-      nip: body.nip ?? current.nip,
       email: body.email ?? current.email,
       nomor_telepon: body.telepon ?? current.nomor_telepon,
       jenis_kelamin: body.jenis_kelamin ?? current.jenis_kelamin,
       tempat_lahir: body.tempat_lahir ?? current.tempat_lahir,
       tanggal_lahir: body.tanggal_lahir ?? current.tanggal_lahir,
       alamat: body.alamat ?? current.alamat,
-      mata_pelajaran: body.mata_pelajaran ?? current.mata_pelajaran,
       foto_profil: body.foto_profil ?? current.foto_profil,
       updated_at: new Date(),
     })

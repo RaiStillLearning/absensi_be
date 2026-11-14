@@ -218,11 +218,100 @@ adminRouter.get("/siswa/check-nisn", async (c) => {
   return c.json(check, 200);
 });
 
+export const PromotionHistoryItemSchema = z
+  .object({
+    id: z.string().openapi({ example: "550e8400-e29b-41d4-a716-446655440000" }),
+    batch_id: z.string().nullable().openapi({ example: "550e8400-e29b-41d4-a716-446655440001" }),
+    student_id: z.string().nullable().openapi({ example: "550e8400-e29b-41d4-a716-446655440002" }),
+    nisn: z.string().openapi({ example: "0102641001" }),
+    nama_siswa: z.string().openapi({ example: "Ahmad Rizky Pratama" }),
+    kelas_sebelumnya: z.string().openapi({ example: "X RPL 1" }),
+    kelas_tujuan: z.string().openapi({ example: "XI RPL 1" }),
+    tahun_ajaran: z.string().openapi({ example: "2026/2027" }),
+    jenis_proses: z.enum(["Otomatis", "Manual"]).openapi({ example: "Otomatis" }),
+    executed_by: z.string().openapi({ example: "Admin" }),
+    catatan: z.string().openapi({ example: "Kenaikan kelas reguler" }),
+    tanggal_kenaikan: z.string().openapi({ example: "2026-06-30T00:00:00.000Z" }),
+  })
+  .openapi("PromotionHistoryItem");
+
+export const PromotionHistoryResponseSchema = z
+  .object({
+    success: z.boolean().default(true),
+    message: z.string().default("Riwayat kenaikan kelas berhasil diambil"),
+    items: z.array(PromotionHistoryItemSchema),
+    data: z.array(PromotionHistoryItemSchema),
+    pagination: z.object({
+      page: z.number().openapi({ example: 1 }),
+      limit: z.number().openapi({ example: 15 }),
+      total: z.number().openapi({ example: 32 }),
+      total_pages: z.number().openapi({ example: 3 }),
+    }),
+  })
+  .openapi("PromotionHistoryResponse");
+
 /**
- * GET /api/v1/admin/siswa/riwayat-kenaikan
+ * 4. GET /api/v1/admin/siswa/riwayat-kenaikan
  * Daftar riwayat kenaikan kelas seluruh siswa (Otomatis & Manual).
  */
-adminRouter.get("/siswa/riwayat-kenaikan", async (c) => {
+export const getAdminPromotionHistoryRoute = createRoute({
+  method: "get",
+  path: "/siswa/riwayat-kenaikan",
+  tags: [API_TAGS.ADMIN],
+  summary: "Get All Students Promotion History",
+  description:
+    "Daftar riwayat kenaikan kelas seluruh siswa (Otomatis & Manual) dengan filter pencarian nama/NISN, jenis proses, tahun ajaran, kelas, dan pagination.",
+  security: [{ BearerAuth: [] }],
+  request: {
+    query: z.object({
+      search: z.string().optional(),
+      nisn: z.string().optional(),
+      jenis_proses: z.string().optional(),
+      tahun_ajaran: z.string().optional(),
+      kelas: z.string().optional(),
+      page: z.coerce.number().optional().default(1),
+      limit: z.coerce.number().optional().default(15),
+    }),
+  },
+  responses: {
+    200: {
+      description: "Riwayat kenaikan kelas berhasil diambil",
+      content: {
+        "application/json": {
+          schema: PromotionHistoryResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+adminRouter.openapi(getAdminPromotionHistoryRoute, async (c) => {
+  const { search, nisn, jenis_proses, tahun_ajaran, kelas, page, limit } = c.req.valid("query");
+
+  const result = await listPromotionHistory({
+    search,
+    nisn,
+    jenis_proses,
+    tahun_ajaran,
+    kelas,
+    page,
+    limit,
+  });
+
+  return c.json(
+    {
+      success: true,
+      message: "Riwayat kenaikan kelas berhasil diambil",
+      items: result.items,
+      data: result.items,
+      pagination: result.pagination,
+    },
+    200
+  );
+});
+
+// Alias: GET /api/v1/admin/riwayat-kenaikan
+adminRouter.get("/riwayat-kenaikan", async (c) => {
   const search = c.req.query("search") || "";
   const nisn = c.req.query("nisn") || "";
   const jenis_proses = c.req.query("jenis_proses") || "";
@@ -241,7 +330,16 @@ adminRouter.get("/siswa/riwayat-kenaikan", async (c) => {
     limit,
   });
 
-  return c.json(result, 200);
+  return c.json(
+    {
+      success: true,
+      message: "Riwayat kenaikan kelas berhasil diambil",
+      items: result.items,
+      data: result.items,
+      pagination: result.pagination,
+    },
+    200
+  );
 });
 
 /**

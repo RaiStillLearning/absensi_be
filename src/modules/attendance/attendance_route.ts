@@ -1,4 +1,5 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
+import { rateLimitAuth } from "../../middlewares/auth";
 import { API_TAGS } from "../../shared/constants";
 import { ErrorResponseSchema } from "../../shared/types/api";
 import { process_barcode_attendance } from "./attendance_service";
@@ -110,6 +111,9 @@ export const daily_scan_route = createRoute({
  * Attendance router instance
  */
 export const attendance_router = new OpenAPIHono();
+
+// Rate limiting proteksi brute-force barcode/token (60 request per menit per IP)
+attendance_router.use("/attendance/daily/scan", rateLimitAuth(60, 60 * 1000, "scanner_barcode"));
 
 attendance_router.openapi(daily_scan_route, async (c) => {
   const { barcode_token, request_id } = c.req.valid("json");

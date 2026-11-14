@@ -64,22 +64,73 @@ export async function process_barcode_attendance(
   barcode_token: string,
   request_id?: string
 ): Promise<scan_attendance_result> {
+  const cleanToken = String(barcode_token || "").trim();
+  if (!cleanToken) {
+    return {
+      status: "invalid_barcode",
+      message: "Barcode tidak valid",
+    };
+  }
+
   // 1. Hash barcode token using SHA-256
-  const token_hash = hash_barcode_token(barcode_token);
+  const token_hash = hash_barcode_token(cleanToken);
 
-  // 2. Find active barcode
-  const barcode_rows = await db
-    .select()
-    .from(student_barcodes)
-    .where(
-      and(
-        eq(student_barcodes.token_hash, token_hash),
-        eq(student_barcodes.is_active, true)
+  // 2. Find active barcode by:
+  //    a) token_hash (Token QR Code aman kriptografis)
+  //    b) barcode_value (Kode 1D Barcode fisik kartu pelajar, misal: "GC-9999999901")
+  //    c) NISN siswa langsung (misal: "9999999901")
+  let active_barcode = (
+    await db
+      .select()
+      .from(student_barcodes)
+      .where(
+        and(
+          eq(student_barcodes.token_hash, token_hash),
+          eq(student_barcodes.is_active, true)
+        )
       )
-    )
-    .limit(1);
+      .limit(1)
+  )[0];
 
-  const active_barcode = barcode_rows[0];
+  if (!active_barcode) {
+    // Cari berdasarkan barcode_value (misal "GC-9999999901")
+    const byVal = await db
+      .select()
+      .from(student_barcodes)
+      .where(
+        and(
+          eq(student_barcodes.barcode_value, cleanToken),
+          eq(student_barcodes.is_active, true)
+        )
+      )
+      .limit(1);
+
+    if (byVal.length > 0) {
+      active_barcode = byVal[0];
+    } else {
+      // Cari berdasarkan NISN siswa langsung
+      const [byNisn] = await db
+        .select()
+        .from(students)
+        .where(eq(students.nisn, cleanToken))
+        .limit(1);
+
+      if (byNisn) {
+        const [bc] = await db
+          .select()
+          .from(student_barcodes)
+          .where(
+            and(
+              eq(student_barcodes.student_id, byNisn.id),
+              eq(student_barcodes.is_active, true)
+            )
+          )
+          .limit(1);
+        if (bc) active_barcode = bc;
+      }
+    }
+  }
+
   if (!active_barcode) {
     return {
       status: "invalid_barcode",

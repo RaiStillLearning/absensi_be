@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
-import { and, count, eq, isNull } from "drizzle-orm";
+import { and, count, eq, isNull, or } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import { migrate as migratePglite } from "drizzle-orm/pglite/migrator";
@@ -667,6 +667,41 @@ async function runMigrationsAndSeed(): Promise<void> {
           catatan: item.catatan || "",
         });
       }
+    }
+  }
+
+  // 6. Seed Initial Student Promotion Logs (Riwayat Kenaikan Kelas) if empty
+  const existingPromoLogs = await db.select({ value: count() }).from(schema.student_promotion_logs);
+  if ((existingPromoLogs[0]?.value ?? 0) === 0) {
+    const demoStudents = await db
+      .select()
+      .from(schema.students)
+      .where(
+        or(
+          eq(schema.students.nisn, "0102641001"),
+          eq(schema.students.kelas, "X RPL 1")
+        )
+      )
+      .limit(5);
+
+    if (demoStudents.length > 0) {
+      const demoLogs = demoStudents.map((st, idx) => ({
+        student_id: st.id,
+        nisn: st.nisn,
+        student_name: st.full_name,
+        from_class: idx % 2 === 0 ? "X RPL 1" : "X RPL 2",
+        to_class: idx % 2 === 0 ? "XI RPL 1" : "XI RPL 2",
+        tahun_ajaran: "2025/2026",
+        process_type: idx === 1 ? "Manual" : "Otomatis",
+        executed_by: idx === 1 ? "Admin Kurikulum" : "System Scheduler",
+        notes:
+          idx === 1
+            ? "Penyesuaian kelas kejuruan RPL melalui evaluasi portofolio akademik"
+            : "Kenaikan kelas reguler akhir tahun ajaran 2025/2026 (Kriteria kehadiran >85%)",
+        promoted_at: new Date(Date.now() - (idx + 1) * 30 * 24 * 60 * 60 * 1000),
+      }));
+
+      await db.insert(schema.student_promotion_logs).values(demoLogs);
     }
   }
 

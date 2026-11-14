@@ -12,6 +12,7 @@ import {
 import { type DecodedAuthToken } from "../../middlewares/auth";
 import { API_TAGS } from "../../shared/constants";
 import { ErrorResponseSchema } from "../../shared/types/api";
+import { listPromotionHistory } from "../admin/siswa_admin_service";
 
 export const walasRouter = new OpenAPIHono();
 
@@ -367,6 +368,23 @@ walasRouter.openapi(updateWalasStudentStatusRoute, async (c) => {
     return c.json({ success: false, message: "Siswa tidak ditemukan" }, 404);
   }
 
+  // Otorisasi BOLA: Pastikan siswa berada di kelas binaan wali kelas yang bersangkutan
+  const teacher = await getActiveWalasTeacherRow(c);
+  const targetKelas = teacher?.kelas_walas;
+  if (targetKelas) {
+    const [student] = await db
+      .select({ kelas: students.kelas })
+      .from(students)
+      .where(eq(students.id, record.student_id))
+      .limit(1);
+    if (student?.kelas && student.kelas !== targetKelas) {
+      return c.json(
+        { success: false, message: "Akses ditolak: Siswa ini bukan bagian dari kelas binaan Anda." },
+        403
+      );
+    }
+  }
+
   const newKet = keterangan || (status === "Hadir" ? "Tepat waktu" : "-");
   await db
     .update(daily_attendance_records)
@@ -420,9 +438,37 @@ export const deleteWalasStudentRoute = createRoute({
 
 walasRouter.openapi(deleteWalasStudentRoute, async (c) => {
   const { id } = c.req.valid("param");
+
+  const [record] = await db
+    .select()
+    .from(daily_attendance_records)
+    .where(eq(daily_attendance_records.record_code, id))
+    .limit(1);
+
+  if (!record) {
+    return c.json({ success: false, message: "Data kehadiran siswa tidak ditemukan." }, 404);
+  }
+
+  // Otorisasi BOLA: Pastikan siswa berada di kelas binaan wali kelas
+  const teacher = await getActiveWalasTeacherRow(c);
+  const targetKelas = teacher?.kelas_walas;
+  if (targetKelas) {
+    const [student] = await db
+      .select({ kelas: students.kelas })
+      .from(students)
+      .where(eq(students.id, record.student_id))
+      .limit(1);
+    if (student?.kelas && student.kelas !== targetKelas) {
+      return c.json(
+        { success: false, message: "Akses ditolak: Siswa ini bukan bagian dari kelas binaan Anda." },
+        403
+      );
+    }
+  }
+
   await db
     .delete(daily_attendance_records)
-    .where(eq(daily_attendance_records.record_code, id));
+    .where(eq(daily_attendance_records.id, record.id));
   return c.json({ success: true, message: "Data siswa berhasil dihapus." }, 200);
 });
 
@@ -605,6 +651,91 @@ walasRouter.openapi(saveWalasAbsensiRoute, async (c) => {
     {
       success: true,
       message: `Data absensi kelas ${kelas} tanggal ${tanggal} berhasil disimpan!`,
+    },
+    200
+  );
+});
+
+export const WalasPromotionHistoryItemSchema = z
+  .object({
+    id: z.string().openapi({ example: "550e8400-e29b-41d4-a716-446655440000" }),
+    batch_id: z.string().nullable().openapi({ example: "550e8400-e29b-41d4-a716-446655440001" }),
+    student_id: z.string().nullable().openapi({ example: "550e8400-e29b-41d4-a716-446655440002" }),
+    nisn: z.string().openapi({ example: "0102641001" }),
+    nama_siswa: z.string().openapi({ example: "Ahmad Rizky Pratama" }),
+    kelas_sebelumnya: z.string().openapi({ example: "X RPL 1" }),
+    kelas_tujuan: z.string().openapi({ example: "XI RPL 1" }),
+    tahun_ajaran: z.string().openapi({ example: "2026/2027" }),
+    jenis_proses: z.enum(["Otomatis", "Manual"]).openapi({ example: "Otomatis" }),
+    executed_by: z.string().openapi({ example: "Admin" }),
+    catatan: z.string().openapi({ example: "Kenaikan kelas reguler" }),
+    tanggal_kenaikan: z.string().openapi({ example: "2026-06-30T00:00:00.000Z" }),
+  })
+  .openapi("WalasPromotionHistoryItem");
+
+/**
+ * 8. GET /api/v1/walas/riwayat-kenaikan
+ * Mengambil riwayat kenaikan kelas siswa binaan wali kelas.
+ */
+export const getWalasPromotionHistoryRoute = createRoute({
+  method: "get",
+  path: "/riwayat-kenaikan",
+  tags: [API_TAGS.WALAS],
+  summary: "Get Homeroom Students Class Promotion History",
+  description:
+    "Daftar riwayat kenaikan kelas untuk siswa yang berada di kelas binaan wali kelas (berdasarkan kelas_walas).",
+  security: [{ BearerAuth: [] }],
+  request: {
+    query: z.object({
+      search: z.string().optional(),
+      nisn: z.string().optional(),
+      page: z.coerce.number().optional().default(1),
+      limit: z.coerce.number().optional().default(15),
+    }),
+  },
+  responses: {
+    200: {
+      description: "Daftar riwayat kenaikan kelas siswa binaan",
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean().default(true),
+            message: z.string(),
+            items: z.array(WalasPromotionHistoryItemSchema),
+            data: z.array(WalasPromotionHistoryItemSchema),
+            pagination: z.object({
+              page: z.number().openapi({ example: 1 }),
+              limit: z.number().openapi({ example: 15 }),
+              total: z.number().openapi({ example: 32 }),
+              total_pages: z.number().openapi({ example: 3 }),
+            }),
+          }),
+        },
+      },
+    },
+  },
+});
+
+walasRouter.openapi(getWalasPromotionHistoryRoute, async (c) => {
+  const { search, nisn, page, limit } = c.req.valid("query");
+  const teacher = await getActiveWalasTeacherRow(c);
+  const targetKelas = teacher?.kelas_walas || "X RPL 1";
+
+  const result = await listPromotionHistory({
+    kelas: targetKelas,
+    search,
+    nisn,
+    page,
+    limit,
+  });
+
+  return c.json(
+    {
+      success: true,
+      message: `Riwayat kenaikan kelas siswa binaan ${targetKelas} berhasil diambil`,
+      items: result.items,
+      data: result.items,
+      pagination: result.pagination,
     },
     200
   );
