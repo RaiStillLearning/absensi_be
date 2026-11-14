@@ -343,6 +343,14 @@ export const updateWalasStudentStatusRoute = createRoute({
         },
       },
     },
+    403: {
+      description: "Akses ditolak: Siswa ini bukan bagian dari kelas binaan Anda",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
     404: {
       description: "Student not found",
       content: {
@@ -430,6 +438,22 @@ export const deleteWalasStudentRoute = createRoute({
             success: z.boolean(),
             message: z.string(),
           }),
+        },
+      },
+    },
+    403: {
+      description: "Akses ditolak: Siswa ini bukan bagian dari kelas binaan Anda",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    404: {
+      description: "Data kehadiran siswa tidak ditemukan",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
         },
       },
     },

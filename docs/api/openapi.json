@@ -899,6 +899,136 @@
           "peran"
         ]
       },
+      "PromotionHistoryResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "default": true
+          },
+          "message": {
+            "type": "string",
+            "default": "Riwayat kenaikan kelas berhasil diambil"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromotionHistoryItem"
+            }
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromotionHistoryItem"
+            }
+          },
+          "pagination": {
+            "type": "object",
+            "properties": {
+              "page": {
+                "type": "number",
+                "example": 1
+              },
+              "limit": {
+                "type": "number",
+                "example": 15
+              },
+              "total": {
+                "type": "number",
+                "example": 32
+              },
+              "total_pages": {
+                "type": "number",
+                "example": 3
+              }
+            },
+            "required": [
+              "page",
+              "limit",
+              "total",
+              "total_pages"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "data",
+          "pagination"
+        ]
+      },
+      "PromotionHistoryItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          },
+          "batch_id": {
+            "type": "string",
+            "nullable": true,
+            "example": "550e8400-e29b-41d4-a716-446655440001"
+          },
+          "student_id": {
+            "type": "string",
+            "nullable": true,
+            "example": "550e8400-e29b-41d4-a716-446655440002"
+          },
+          "nisn": {
+            "type": "string",
+            "example": "0102641001"
+          },
+          "nama_siswa": {
+            "type": "string",
+            "example": "Ahmad Rizky Pratama"
+          },
+          "kelas_sebelumnya": {
+            "type": "string",
+            "example": "X RPL 1"
+          },
+          "kelas_tujuan": {
+            "type": "string",
+            "example": "XI RPL 1"
+          },
+          "tahun_ajaran": {
+            "type": "string",
+            "example": "2026/2027"
+          },
+          "jenis_proses": {
+            "type": "string",
+            "enum": [
+              "Otomatis",
+              "Manual"
+            ],
+            "example": "Otomatis"
+          },
+          "executed_by": {
+            "type": "string",
+            "example": "Admin"
+          },
+          "catatan": {
+            "type": "string",
+            "example": "Kenaikan kelas reguler"
+          },
+          "tanggal_kenaikan": {
+            "type": "string",
+            "example": "2026-06-30T00:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "batch_id",
+          "student_id",
+          "nisn",
+          "nama_siswa",
+          "kelas_sebelumnya",
+          "kelas_tujuan",
+          "tahun_ajaran",
+          "jenis_proses",
+          "executed_by",
+          "catatan",
+          "tanggal_kenaikan"
+        ]
+      },
       "WalasProfile": {
         "type": "object",
         "properties": {
@@ -1055,6 +1185,79 @@
           "keterangan"
         ]
       },
+      "WalasPromotionHistoryItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          },
+          "batch_id": {
+            "type": "string",
+            "nullable": true,
+            "example": "550e8400-e29b-41d4-a716-446655440001"
+          },
+          "student_id": {
+            "type": "string",
+            "nullable": true,
+            "example": "550e8400-e29b-41d4-a716-446655440002"
+          },
+          "nisn": {
+            "type": "string",
+            "example": "0102641001"
+          },
+          "nama_siswa": {
+            "type": "string",
+            "example": "Ahmad Rizky Pratama"
+          },
+          "kelas_sebelumnya": {
+            "type": "string",
+            "example": "X RPL 1"
+          },
+          "kelas_tujuan": {
+            "type": "string",
+            "example": "XI RPL 1"
+          },
+          "tahun_ajaran": {
+            "type": "string",
+            "example": "2026/2027"
+          },
+          "jenis_proses": {
+            "type": "string",
+            "enum": [
+              "Otomatis",
+              "Manual"
+            ],
+            "example": "Otomatis"
+          },
+          "executed_by": {
+            "type": "string",
+            "example": "Admin"
+          },
+          "catatan": {
+            "type": "string",
+            "example": "Kenaikan kelas reguler"
+          },
+          "tanggal_kenaikan": {
+            "type": "string",
+            "example": "2026-06-30T00:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "batch_id",
+          "student_id",
+          "nisn",
+          "nama_siswa",
+          "kelas_sebelumnya",
+          "kelas_tujuan",
+          "tahun_ajaran",
+          "jenis_proses",
+          "executed_by",
+          "catatan",
+          "tanggal_kenaikan"
+        ]
+      },
       "SiswaProfile": {
         "type": "object",
         "properties": {
@@ -1146,6 +1349,79 @@
           "telepon_wali",
           "email",
           "status_akun"
+        ]
+      },
+      "SiswaPromotionHistoryItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          },
+          "batch_id": {
+            "type": "string",
+            "nullable": true,
+            "example": "550e8400-e29b-41d4-a716-446655440001"
+          },
+          "student_id": {
+            "type": "string",
+            "nullable": true,
+            "example": "550e8400-e29b-41d4-a716-446655440002"
+          },
+          "nisn": {
+            "type": "string",
+            "example": "0102641001"
+          },
+          "nama_siswa": {
+            "type": "string",
+            "example": "Ahmad Rizky Pratama"
+          },
+          "kelas_sebelumnya": {
+            "type": "string",
+            "example": "X RPL 1"
+          },
+          "kelas_tujuan": {
+            "type": "string",
+            "example": "XI RPL 1"
+          },
+          "tahun_ajaran": {
+            "type": "string",
+            "example": "2026/2027"
+          },
+          "jenis_proses": {
+            "type": "string",
+            "enum": [
+              "Otomatis",
+              "Manual"
+            ],
+            "example": "Otomatis"
+          },
+          "executed_by": {
+            "type": "string",
+            "example": "System Scheduler"
+          },
+          "catatan": {
+            "type": "string",
+            "example": "Kenaikan kelas reguler"
+          },
+          "tanggal_kenaikan": {
+            "type": "string",
+            "example": "2026-06-30T00:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "batch_id",
+          "student_id",
+          "nisn",
+          "nama_siswa",
+          "kelas_sebelumnya",
+          "kelas_tujuan",
+          "tahun_ajaran",
+          "jenis_proses",
+          "executed_by",
+          "catatan",
+          "tanggal_kenaikan"
         ]
       },
       "ScanSuccessResponse": {
@@ -4993,6 +5269,94 @@
         }
       }
     },
+    "/api/v1/admin/siswa/riwayat-kenaikan": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Get All Students Promotion History",
+        "description": "Daftar riwayat kenaikan kelas seluruh siswa (Otomatis & Manual) dengan filter pencarian nama/NISN, jenis proses, tahun ajaran, kelas, dan pagination.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "search",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "nisn",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "jenis_proses",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "tahun_ajaran",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "kelas",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true,
+              "default": 1
+            },
+            "required": false,
+            "name": "page",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true,
+              "default": 15
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Riwayat kenaikan kelas berhasil diambil",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionHistoryResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/walas/dashboard": {
       "get": {
         "tags": [
@@ -5218,6 +5582,56 @@
               }
             }
           },
+          "403": {
+            "description": "Akses ditolak: Siswa ini bukan bagian dari kelas binaan Anda",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
           "404": {
             "description": "Student not found",
             "content": {
@@ -5298,6 +5712,106 @@
                     },
                     "message": {
                       "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Akses ditolak: Siswa ini bukan bagian dari kelas binaan Anda",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Data kehadiran siswa tidak ditemukan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -5467,6 +5981,124 @@
                   "required": [
                     "success",
                     "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/walas/riwayat-kenaikan": {
+      "get": {
+        "tags": [
+          "Walas"
+        ],
+        "summary": "Get Homeroom Students Class Promotion History",
+        "description": "Daftar riwayat kenaikan kelas untuk siswa yang berada di kelas binaan wali kelas (berdasarkan kelas_walas).",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "search",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "nisn",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true,
+              "default": 1
+            },
+            "required": false,
+            "name": "page",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true,
+              "default": 15
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Daftar riwayat kenaikan kelas siswa binaan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "default": true
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/WalasPromotionHistoryItem"
+                      }
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/WalasPromotionHistoryItem"
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "page": {
+                          "type": "number",
+                          "example": 1
+                        },
+                        "limit": {
+                          "type": "number",
+                          "example": 15
+                        },
+                        "total": {
+                          "type": "number",
+                          "example": 32
+                        },
+                        "total_pages": {
+                          "type": "number",
+                          "example": 3
+                        }
+                      },
+                      "required": [
+                        "page",
+                        "limit",
+                        "total",
+                        "total_pages"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "message",
+                    "items",
+                    "data",
+                    "pagination"
                   ]
                 }
               }
@@ -6379,6 +7011,101 @@
           },
           "404": {
             "description": "Student not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/siswa/riwayat-kenaikan": {
+      "get": {
+        "tags": [
+          "Siswa"
+        ],
+        "summary": "Get Authenticated Student Class Promotion History",
+        "description": "Riwayat kenaikan kelas siswa yang sedang login (termasuk kelas asal, kelas tujuan, tahun ajaran, dan tanggal kenaikan).",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Riwayat kenaikan kelas siswa berhasil diambil",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "default": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "default": "Riwayat kenaikan kelas siswa berhasil diambil"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SiswaPromotionHistoryItem"
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Profil siswa tidak ditemukan",
             "content": {
               "application/json": {
                 "schema": {
