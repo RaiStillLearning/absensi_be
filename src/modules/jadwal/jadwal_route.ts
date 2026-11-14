@@ -2,10 +2,19 @@ import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "../../config/database";
 import { schedules } from "../../config/schema";
+import { requireAuth } from "../../middlewares/auth";
 import { API_TAGS } from "../../shared/constants";
 import { ErrorResponseSchema } from "../../shared/types/api";
 
 export const jadwalRouter = new OpenAPIHono();
+
+// Otorisasi RBAC: Mutasi jadwal (Create, Update, Delete) hanya boleh dilakukan oleh Admin
+jadwalRouter.use("*", async (c, next) => {
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(c.req.method)) {
+    return requireAuth(["admin"])(c, next);
+  }
+  return next();
+});
 
 export const JadwalItemSchema = z
   .object({

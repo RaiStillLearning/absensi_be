@@ -182,20 +182,34 @@ export function enforceHttps() {
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 function allowedOrigins(): string[] {
-  return env.CORS_ORIGIN.split(",")
+  const list = env.CORS_ORIGIN.split(",")
     .map((o) => o.trim())
     .filter(Boolean);
+  // Izinkan juga self origin (localhost:3000) untuk tool internal seperti Swagger UI & Scanner Test
+  const selfOrigin = `http://localhost:${env.APP_PORT}`;
+  if (!list.includes(selfOrigin)) {
+    list.push(selfOrigin);
+  }
+  return list;
 }
 
 /**
  * Untuk request yang mengubah data dan diautentikasi lewat cookie:
- * 1. Header Origin (jika ada) wajib termasuk daftar CORS_ORIGIN.
- * 2. Header X-CSRF-Token wajib sama dengan cookie CSRF (double-submit).
+ * 1. Endpoint yang masuk exemptPaths (misal: hardware scanner / login publik) dibebaskan dari CSRF.
+ * 2. Header Origin (jika ada) wajib termasuk daftar CORS_ORIGIN atau self origin.
+ * 3. Header X-CSRF-Token wajib sama dengan cookie CSRF (double-submit).
  * Request dengan Authorization: Bearer (klien API non-browser) tidak memakai cookie sehingga tidak rentan CSRF.
  */
 export function csrfProtection(options: { exemptPaths?: RegExp[] } = {}) {
   return async (c: Context, next: Next) => {
     if (SAFE_METHODS.has(c.req.method)) {
+      await next();
+      return;
+    }
+
+    const path = new URL(c.req.url).pathname;
+    const isExempt = options.exemptPaths?.some((re) => re.test(path)) ?? false;
+    if (isExempt) {
       await next();
       return;
     }
@@ -209,10 +223,8 @@ export function csrfProtection(options: { exemptPaths?: RegExp[] } = {}) {
     const usesAuthCookies = Boolean(
       getCookie(c, AUTH_COOKIE.ACCESS) || getCookie(c, AUTH_COOKIE.REFRESH)
     );
-    const path = new URL(c.req.url).pathname;
-    const isExempt = options.exemptPaths?.some((re) => re.test(path)) ?? false;
 
-    if (!hasBearer && usesAuthCookies && !isExempt) {
+    if (!hasBearer && usesAuthCookies) {
       const cookieToken = getCookie(c, AUTH_COOKIE.CSRF) || "";
       const headerToken = c.req.header(CSRF_HEADER) || "";
       if (!cookieToken || !headerToken || !safeEqual(cookieToken, headerToken)) {

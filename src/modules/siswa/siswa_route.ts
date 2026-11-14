@@ -1,10 +1,11 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-import { and, asc, eq, or } from "drizzle-orm";
+import { and, asc, desc, eq, or } from "drizzle-orm";
 import type { Context } from "hono";
 import { db } from "../../config/database";
 import {
   daily_attendance_records,
   schedules,
+  student_promotion_logs,
   students,
   subject_attendance_records,
   users,
@@ -190,13 +191,11 @@ siswaRouter.openapi(updateSiswaProfileRoute, async (c) => {
   }
 
   const previousFoto = current.foto_profil;
+  // Keamanan RBAC / Mass Assignment: Siswa TIDAK diizinkan mengubah atribut akademik
+  // (kelas, jurusan, NISN, NIS) secara mandiri. Perubahan tersebut wajib melalui Admin / Kenaikan Kelas.
   const [updated] = await db
     .update(students)
     .set({
-      full_name: body.nama_lengkap ?? current.full_name,
-      nis: body.nis ?? current.nis,
-      kelas: body.kelas ?? current.kelas,
-      jurusan: body.jurusan ?? current.jurusan,
       tempat_lahir: body.tempat_lahir ?? current.tempat_lahir,
       tanggal_lahir: body.tanggal_lahir ?? current.tanggal_lahir,
       gender:
@@ -873,6 +872,144 @@ siswaRouter.openapi(getRekapKehadiranBulananRoute, async (c) => {
       totalPencatatan,
       persentaseHadir,
       breakdown,
+    },
+    200
+  );
+});
+
+export const SiswaPromotionHistoryItemSchema = z
+  .object({
+    id: z.string().openapi({ example: "550e8400-e29b-41d4-a716-446655440000" }),
+    batch_id: z.string().nullable().openapi({ example: "550e8400-e29b-41d4-a716-446655440001" }),
+    student_id: z.string().nullable().openapi({ example: "550e8400-e29b-41d4-a716-446655440002" }),
+    nisn: z.string().openapi({ example: "0102641001" }),
+    nama_siswa: z.string().openapi({ example: "Ahmad Rizky Pratama" }),
+    kelas_sebelumnya: z.string().openapi({ example: "X RPL 1" }),
+    kelas_tujuan: z.string().openapi({ example: "XI RPL 1" }),
+    tahun_ajaran: z.string().openapi({ example: "2026/2027" }),
+    jenis_proses: z.enum(["Otomatis", "Manual"]).openapi({ example: "Otomatis" }),
+    executed_by: z.string().openapi({ example: "System Scheduler" }),
+    catatan: z.string().openapi({ example: "Kenaikan kelas reguler" }),
+    tanggal_kenaikan: z.string().openapi({ example: "2026-06-30T00:00:00.000Z" }),
+  })
+  .openapi("SiswaPromotionHistoryItem");
+
+/**
+ * 9. GET /api/v1/siswa/riwayat-kenaikan
+ * Mengambil seluruh catatan riwayat kenaikan kelas siswa yang sedang login.
+ */
+export const getSiswaRiwayatKenaikanRoute = createRoute({
+  method: "get",
+  path: "/riwayat-kenaikan",
+  tags: [API_TAGS.SISWA],
+  summary: "Get Authenticated Student Class Promotion History",
+  description:
+    "Riwayat kenaikan kelas siswa yang sedang login (termasuk kelas asal, kelas tujuan, tahun ajaran, dan tanggal kenaikan).",
+  security: [{ BearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Riwayat kenaikan kelas siswa berhasil diambil",
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean().default(true),
+            message: z.string().default("Riwayat kenaikan kelas siswa berhasil diambil"),
+            data: z.array(SiswaPromotionHistoryItemSchema),
+          }),
+        },
+      },
+    },
+    404: {
+      description: "Profil siswa tidak ditemukan",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+siswaRouter.openapi(getSiswaRiwayatKenaikanRoute, async (c) => {
+  const student = await getStudentFromContext(c);
+  if (!student) {
+    return c.json({ success: false, message: "Data profil siswa tidak ditemukan" }, 404);
+  }
+
+  const logs = await db
+    .select()
+    .from(student_promotion_logs)
+    .where(
+      or(
+        eq(student_promotion_logs.student_id, student.id),
+        eq(student_promotion_logs.nisn, student.nisn)
+      )
+    )
+    .orderBy(desc(student_promotion_logs.promoted_at));
+
+  const items = logs.map((h) => ({
+    id: h.id,
+    batch_id: h.batch_id,
+    student_id: h.student_id,
+    nisn: h.nisn,
+    nama_siswa: h.student_name,
+    kelas_sebelumnya: h.from_class,
+    kelas_tujuan: h.to_class,
+    tahun_ajaran: h.tahun_ajaran,
+    jenis_proses: (h.process_type === "Manual" ? "Manual" : "Otomatis") as "Otomatis" | "Manual",
+    executed_by: h.executed_by,
+    catatan: h.notes || "",
+    tanggal_kenaikan: h.promoted_at.toISOString(),
+  }));
+
+  return c.json(
+    {
+      success: true,
+      message: "Riwayat kenaikan kelas siswa berhasil diambil",
+      data: items,
+    },
+    200
+  );
+});
+
+// Alias: GET /api/v1/siswa/riwayat-kenaikan-kelas
+siswaRouter.get("/riwayat-kenaikan-kelas", async (c) => {
+  const student = await getStudentFromContext(c);
+  if (!student) {
+    return c.json({ success: false, message: "Data profil siswa tidak ditemukan" }, 404);
+  }
+
+  const logs = await db
+    .select()
+    .from(student_promotion_logs)
+    .where(
+      or(
+        eq(student_promotion_logs.student_id, student.id),
+        eq(student_promotion_logs.nisn, student.nisn)
+      )
+    )
+    .orderBy(desc(student_promotion_logs.promoted_at));
+
+  const items = logs.map((h) => ({
+    id: h.id,
+    batch_id: h.batch_id,
+    student_id: h.student_id,
+    nisn: h.nisn,
+    nama_siswa: h.student_name,
+    kelas_sebelumnya: h.from_class,
+    kelas_tujuan: h.to_class,
+    tahun_ajaran: h.tahun_ajaran,
+    jenis_proses: h.process_type === "Manual" ? "Manual" : "Otomatis",
+    executed_by: h.executed_by,
+    catatan: h.notes || "",
+    tanggal_kenaikan: h.promoted_at.toISOString(),
+  }));
+
+  return c.json(
+    {
+      success: true,
+      message: "Riwayat kenaikan kelas siswa berhasil diambil",
+      data: items,
     },
     200
   );

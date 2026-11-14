@@ -134,7 +134,8 @@ export async function deleteLocalAvatarIfOwned(fotoUrl?: string | null): Promise
   if (!cleanUrl.startsWith(AVATAR_PUBLIC_PREFIX)) return;
 
   const filename = cleanUrl.slice(AVATAR_PUBLIC_PREFIX.length);
-  if (!/^[a-zA-Z0-9._-]+$/.test(filename)) return;
+  // Proteksi Path Traversal & Ekstensi Gambar
+  if (!/^[a-zA-Z0-9_-]+\.(?:jpg|jpeg|png)$/i.test(filename)) return;
 
   const fullPath = path.join(AVATAR_UPLOAD_DIR, filename);
   if (existsSync(fullPath)) {
@@ -148,7 +149,8 @@ export async function deleteLocalAvatarIfOwned(fotoUrl?: string | null): Promise
 export async function readLocalAvatarFile(
   filename: string,
 ): Promise<{ buffer: Buffer; mimeType: string } | null> {
-  if (!/^[a-zA-Z0-9._-]+$/.test(filename)) return null;
+  // Proteksi Path Traversal & Ekstensi Gambar
+  if (!/^[a-zA-Z0-9_-]+\.(?:jpg|jpeg|png)$/i.test(filename)) return null;
   const fullPath = path.join(AVATAR_UPLOAD_DIR, filename);
   if (!existsSync(fullPath)) return null;
 

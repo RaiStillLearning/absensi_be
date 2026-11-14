@@ -78,13 +78,16 @@ async function runTests() {
   // 7. Absensi Admin
   await testEndpoint("Admin Monitoring Absensi", "/api/v1/absensi?tanggal=2026-10-19", { headers: adminHeaders });
 
-  // 8. Admin Profil
+  // 8. Admin Profil & Riwayat Kenaikan
   await testEndpoint("Admin Profil", "/api/v1/admin/profil", { headers: adminHeaders });
+  await testEndpoint("Admin Riwayat Kenaikan Siswa", "/api/v1/admin/siswa/riwayat-kenaikan", { headers: adminHeaders });
+  await testEndpoint("Admin Riwayat Kenaikan Alias", "/api/v1/admin/riwayat-kenaikan", { headers: adminHeaders });
 
   // 9. Walas Endpoints
   await testEndpoint("Walas Dashboard", "/api/v1/walas/dashboard", { headers: guruHeaders });
   await testEndpoint("Walas Monitoring", "/api/v1/walas/monitoring?tanggal=2026-06-05", { headers: guruHeaders });
   await testEndpoint("Walas Rekap Bulan Ini", "/api/v1/walas/rekap/bulan-ini", { headers: guruHeaders });
+  await testEndpoint("Walas Riwayat Kenaikan Siswa Binaan", "/api/v1/walas/riwayat-kenaikan", { headers: guruHeaders });
 
   // 10. Siswa Endpoints
   await testEndpoint("Siswa Profil", "/api/v1/siswa/profil", { headers: siswaHeaders });
@@ -94,6 +97,8 @@ async function runTests() {
   await testEndpoint("Siswa Absensi Realtime", "/api/v1/siswa/absensi/realtime", { headers: siswaHeaders });
   await testEndpoint("Siswa Kehadiran", "/api/v1/siswa/kehadiran", { headers: siswaHeaders });
   await testEndpoint("Siswa Rekap Bulanan", "/api/v1/siswa/kehadiran/rekap?bulan=2025-01", { headers: siswaHeaders });
+  await testEndpoint("Siswa Riwayat Kenaikan Mandiri", "/api/v1/siswa/riwayat-kenaikan", { headers: siswaHeaders });
+  await testEndpoint("Siswa Riwayat Kenaikan Alias", "/api/v1/siswa/riwayat-kenaikan-kelas", { headers: siswaHeaders });
 
   console.log(`\n🎉 Test Summary: ${passed} Passed, ${failed} Failed`);
   return failed === 0;

@@ -484,7 +484,6 @@ dev_scanner_router.get("/scanner-test", (c) => {
         class="scan-input" 
         placeholder="Arahkan scanner HC-P20 ke barcode / QR code..." 
         autocomplete="off" 
-        autofocus 
       />
       <div class="scan-hint">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
@@ -522,8 +521,8 @@ dev_scanner_router.get("/scanner-test", (c) => {
           <button class="btn btn-secondary" style="flex: 1;" id="btnSimulateScan">
             ⚡ Test Scan Token Ini
           </button>
-          <button class="btn btn-secondary" style="flex: 1;" id="btnTestInvalid">
-            ❌ Test Barcode Invalid
+          <button class="btn btn-secondary" style="flex: 1;" id="btnTestInvalid" title="Simulasi scan token palsu untuk menguji penolakan sistem (HTTP 404)">
+            ❌ Uji Barcode Palsu (404)
           </button>
         </div>
       </div>
@@ -716,22 +715,28 @@ dev_scanner_router.get("/scanner-test", (c) => {
       }
     });
 
-    // Fallback: Auto-submit after 300ms pause if scanner doesn't send Enter suffix
+    // Fallback: Auto-submit after 700ms pause if scanner doesn't send Enter suffix
     scanInput.addEventListener('input', () => {
       if (autoSubmitTimer) clearTimeout(autoSubmitTimer);
       const val = scanInput.value.trim();
-      // If token length is substantial (e.g., > 15 chars typical for our random tokens)
-      if (val.length >= 15) {
+      // Only auto-submit if text reaches reasonable full token / barcode length (>= 20 chars or exactly 10 digits NISN)
+      if (val.length >= 20 || /^\d{10}$/.test(val)) {
         autoSubmitTimer = setTimeout(() => {
           if (!isSubmitting && scanInput.value.trim()) {
             handleScanSubmit(scanInput.value.trim());
           }
-        }, 300);
+        }, 700);
       }
     });
 
     // Core Scan Submission to API
     async function handleScanSubmit(rawToken) {
+      if (autoSubmitTimer) {
+        clearTimeout(autoSubmitTimer);
+        autoSubmitTimer = null;
+      }
+      const token = String(rawToken || '').trim();
+      if (!token) return;
       if (isSubmitting) return;
       isSubmitting = true;
       scanInput.disabled = true;
@@ -746,7 +751,7 @@ dev_scanner_router.get("/scanner-test", (c) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            barcode_token: rawToken,
+            barcode_token: token,
             request_id: requestId,
           }),
         });
@@ -763,7 +768,7 @@ dev_scanner_router.get("/scanner-test", (c) => {
             'Status': json.data.attendance_status.toUpperCase(),
             'Waktu Scan': new Date(json.data.check_in_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB',
           });
-          addHistoryRecord(scanTime, rawToken, json.data.student_name, 'SUCCESS', 'Absensi berhasil');
+          addHistoryRecord(scanTime, token, json.data.student_name, 'SUCCESS', 'Absensi berhasil');
         } else if (res.status === 409) {
           // Duplicate
           playBeep('duplicate');
@@ -772,16 +777,26 @@ dev_scanner_router.get("/scanner-test", (c) => {
             'Keterangan': 'Siswa telah tercatat hadir pada sesi absensi ini.',
             'Waktu Percobaan': scanTime.toLocaleTimeString('id-ID') + ' WIB'
           });
-          addHistoryRecord(scanTime, rawToken, 'TEST SISWA BARCODE', 'DUPLICATE', json.message);
+          addHistoryRecord(scanTime, token, 'TEST SISWA BARCODE', 'DUPLICATE', json.message);
+        } else if (res.status === 404) {
+          // Invalid barcode token
+          playBeep('error');
+          showResult('error', '❌ Barcode Tidak Dikenali', {
+            'Status': 'TIDAK TERDAFTAR (404)',
+            'Pesan Sistem': json.message || 'Barcode / QR tidak terdaftar di sistem',
+            'Token Diinput': token.length > 25 ? token.substring(0, 22) + '...' : token,
+            'Saran': 'Gunakan QR code valid yang tampil di samping atau klik "⚡ Test Scan Token Ini".'
+          });
+          addHistoryRecord(scanTime, token, '-', 'INVALID', json.message || 'Barcode tidak valid');
         } else {
-          // Invalid or error
+          // Other error
           playBeep('error');
           showResult('error', '❌ ' + (json.message || 'Gagal Melakukan Absensi'), {
             'Kode Status': res.status,
-            'Token Diterima': rawToken.substring(0, 15) + '...',
-            'Pesan Sistem': json.message || 'Barcode tidak valid'
+            'Token Diterima': token.substring(0, 15) + '...',
+            'Pesan Sistem': json.message || 'Terjadi kesalahan sistem'
           });
-          addHistoryRecord(scanTime, rawToken, '-', 'ERROR', json.message || 'Error');
+          addHistoryRecord(scanTime, token, '-', 'ERROR', json.message || 'Error');
         }
       } catch (err) {
         playBeep('error');

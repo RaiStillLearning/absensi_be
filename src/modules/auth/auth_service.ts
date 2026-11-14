@@ -253,6 +253,7 @@ export async function authenticateUser(
             nama_lengkap: matchedTeacher.nama_guru,
             email: matchedTeacher.email || "",
             teacher_id: matchedTeacher.id,
+            must_change_password: true,
             is_active: true,
           })
           .returning();
