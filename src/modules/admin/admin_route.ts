@@ -186,38 +186,6 @@ adminRouter.openapi(updateAdminProfileRoute, async (c) => {
  * ============================================================================
  */
 
-/**
- * GET /api/v1/admin/siswa
- * Daftar seluruh siswa dengan search (NISN/nama), filter kelas, filter status, dan pagination.
- */
-adminRouter.get("/siswa", async (c) => {
-  const search = c.req.query("search") || "";
-  const kelas = c.req.query("kelas") || "";
-  const status = c.req.query("status") || "";
-  const page = Number(c.req.query("page") || 1);
-  const limit = Number(c.req.query("limit") || 10);
-
-  const result = await listAdminStudents({
-    search,
-    kelas,
-    status,
-    page,
-    limit,
-  });
-
-  return c.json(result, 200);
-});
-
-/**
- * GET /api/v1/admin/siswa/check-nisn?nisn=...
- * Memeriksa ketersediaan dan keunikan NISN sebelum menyimpan data siswa baru.
- */
-adminRouter.get("/siswa/check-nisn", async (c) => {
-  const nisn = c.req.query("nisn") || "";
-  const check = await checkNisnAvailability(nisn);
-  return c.json(check, 200);
-});
-
 export const PromotionHistoryItemSchema = z
   .object({
     id: z.string().openapi({ example: "550e8400-e29b-41d4-a716-446655440000" }),
@@ -249,6 +217,38 @@ export const PromotionHistoryResponseSchema = z
     }),
   })
   .openapi("PromotionHistoryResponse");
+
+// Alias: GET /api/v1/admin/riwayat-kenaikan
+adminRouter.get("/riwayat-kenaikan", async (c) => {
+  const search = c.req.query("search") || "";
+  const nisn = c.req.query("nisn") || "";
+  const jenis_proses = c.req.query("jenis_proses") || "";
+  const tahun_ajaran = c.req.query("tahun_ajaran") || "";
+  const kelas = c.req.query("kelas") || "";
+  const page = Number(c.req.query("page") || 1);
+  const limit = Number(c.req.query("limit") || 15);
+
+  const result = await listPromotionHistory({
+    search,
+    nisn,
+    jenis_proses,
+    tahun_ajaran,
+    kelas,
+    page,
+    limit,
+  });
+
+  return c.json(
+    {
+      success: true,
+      message: "Riwayat kenaikan kelas berhasil diambil",
+      items: result.items,
+      data: result.items,
+      pagination: result.pagination,
+    },
+    200
+  );
+});
 
 /**
  * 4. GET /api/v1/admin/siswa/riwayat-kenaikan
@@ -310,44 +310,409 @@ adminRouter.openapi(getAdminPromotionHistoryRoute, async (c) => {
   );
 });
 
-// Alias: GET /api/v1/admin/riwayat-kenaikan
-adminRouter.get("/riwayat-kenaikan", async (c) => {
-  const search = c.req.query("search") || "";
-  const nisn = c.req.query("nisn") || "";
-  const jenis_proses = c.req.query("jenis_proses") || "";
-  const tahun_ajaran = c.req.query("tahun_ajaran") || "";
-  const kelas = c.req.query("kelas") || "";
-  const page = Number(c.req.query("page") || 1);
-  const limit = Number(c.req.query("limit") || 15);
+export const AdminStudentItemSchema = z
+  .object({
+    id: z.string().openapi({ example: "550e8400-e29b-41d4-a716-446655440000" }),
+    nisn: z.string().openapi({ example: "0102641001" }),
+    nama_lengkap: z.string().openapi({ example: "Ahmad Rizky Pratama" }),
+    nama_siswa: z.string().optional().openapi({ example: "Ahmad Rizky Pratama" }),
+    kelas: z.string().openapi({ example: "X RPL 1" }),
+    jurusan: z.string().openapi({ example: "Rekayasa Perangkat Lunak" }),
+    jenis_kelamin: z.string().optional().openapi({ example: "Laki-laki" }),
+    status_siswa: z.enum(["Aktif", "Lulus"]).openapi({ example: "Aktif" }),
+    status: z.enum(["Aktif", "Lulus"]).openapi({ example: "Aktif" }),
+    foto_profil: z.string().openapi({ example: "/avatar-student.svg" }),
+    tingkat: z.string().openapi({ example: "10" }),
+    created_at: z.string().optional(),
+    updated_at: z.string().optional(),
+  })
+  .openapi("AdminStudentItem");
 
-  const result = await listPromotionHistory({
-    search,
-    nisn,
-    jenis_proses,
-    tahun_ajaran,
-    kelas,
-    page,
-    limit,
-  });
+export const AdminStudentsListResponseSchema = z
+  .object({
+    items: z.array(AdminStudentItemSchema),
+    available_classes: z.array(z.string()),
+    pagination: z.object({
+      page: z.number().openapi({ example: 1 }),
+      limit: z.number().openapi({ example: 10 }),
+      total: z.number().openapi({ example: 32 }),
+      total_pages: z.number().openapi({ example: 4 }),
+    }),
+    summary: z.object({
+      total_siswa: z.number().openapi({ example: 32 }),
+      total_aktif: z.number().openapi({ example: 32 }),
+      total_lulus: z.number().openapi({ example: 0 }),
+    }),
+  })
+  .openapi("AdminStudentsListResponse");
 
-  return c.json(
-    {
-      success: true,
-      message: "Riwayat kenaikan kelas berhasil diambil",
-      items: result.items,
-      data: result.items,
-      pagination: result.pagination,
+export const CheckNisnResponseSchema = z
+  .object({
+    valid: z.boolean().openapi({ example: true }),
+    available: z.boolean().openapi({ example: true }),
+    nisn: z.string().openapi({ example: "0102641001" }),
+    message: z.string().openapi({ example: "NISN tersedia dan dapat digunakan" }),
+  })
+  .openapi("CheckNisnResponse");
+
+export const CreateAdminStudentPayloadSchema = z
+  .object({
+    nisn: z.string().min(4).max(20).openapi({ example: "0102641001" }),
+    nama_lengkap: z.string().min(2).max(150).openapi({ example: "Ahmad Rizky Pratama" }),
+    kelas: z.string().min(1).openapi({ example: "X RPL 1" }),
+    jurusan: z.string().optional().openapi({ example: "Rekayasa Perangkat Lunak" }),
+    foto_profil: z.string().optional(),
+    jenis_kelamin: z.string().optional().openapi({ example: "Laki-laki" }),
+  })
+  .openapi("CreateAdminStudentPayload");
+
+export const UpdateAdminStudentPayloadSchema = z
+  .object({
+    nama_lengkap: z.string().min(2).max(150).openapi({ example: "Ahmad Rizky Pratama" }),
+    kelas: z.string().min(1).openapi({ example: "XI RPL 1" }),
+    jurusan: z.string().optional().openapi({ example: "Rekayasa Perangkat Lunak" }),
+    foto_profil: z.string().optional(),
+  })
+  .openapi("UpdateAdminStudentPayload");
+
+export const AdminStudentDetailResponseSchema = z
+  .object({
+    siswa: AdminStudentItemSchema,
+    kartu: z.object({
+      nama_sekolah: z.string().openapi({ example: "SMK Ghama Caraka" }),
+      barcode_token: z.string().openapi({ example: "GC-0102641001" }),
+      format: z.string().openapi({ example: "CODE128" }),
+      masa_berlaku: z.string().openapi({ example: "3 Tahun Pelajaran" }),
+      tampak_depan_bg: z.string().openapi({ example: "/kartu-siswa-depan.svg" }),
+      tampak_belakang_bg: z.string().openapi({ example: "/kartu-siswa-belakang.svg" }),
+    }),
+    riwayat_kenaikan: z.array(PromotionHistoryItemSchema),
+  })
+  .openapi("AdminStudentDetailResponse");
+
+export const ManualPromotionPreviewPayloadSchema = z
+  .object({
+    from_class: z.string().min(1).openapi({ example: "11" }),
+    to_class: z.string().min(1).openapi({ example: "12" }),
+    kelas_asal: z.string().optional(),
+    kelas_tujuan: z.string().optional(),
+  })
+  .openapi("ManualPromotionPreviewPayload");
+
+export const ManualPromotionExecutePayloadSchema = z
+  .object({
+    from_class: z.string().min(1).openapi({ example: "11" }),
+    to_class: z.string().min(1).openapi({ example: "12" }),
+    tahun_ajaran: z.string().optional().openapi({ example: "2026/2027" }),
+    catatan: z.string().optional().openapi({ example: "Kenaikan kelas manual" }),
+    keterangan: z.string().optional(),
+    student_nisns: z.array(z.string()).optional(),
+  })
+  .openapi("ManualPromotionExecutePayload");
+
+/**
+ * 1. GET /api/v1/admin/siswa
+ */
+export const listAdminStudentsRoute = createRoute({
+  method: "get",
+  path: "/siswa",
+  tags: [API_TAGS.ADMIN],
+  summary: "List Students for Administrator",
+  description: "Daftar seluruh siswa dengan search, filter kelas, filter status, dan pagination dari PostgreSQL.",
+  security: [{ BearerAuth: [] }],
+  request: {
+    query: z.object({
+      search: z.string().optional(),
+      kelas: z.string().optional(),
+      status: z.string().optional(),
+      page: z.coerce.number().optional().default(1),
+      limit: z.coerce.number().optional().default(10),
+    }),
+  },
+  responses: {
+    200: {
+      description: "Daftar siswa berhasil diambil",
+      content: {
+        "application/json": {
+          schema: AdminStudentsListResponseSchema,
+        },
+      },
     },
-    200
-  );
+  },
+});
+
+adminRouter.openapi(listAdminStudentsRoute, async (c) => {
+  const { search, kelas, status, page, limit } = c.req.valid("query");
+  const result = await listAdminStudents({
+    search: search || "",
+    kelas: kelas || "",
+    status: status || "",
+    page: Number(page || 1),
+    limit: Number(limit || 10),
+  });
+  return c.json(result, 200);
 });
 
 /**
- * POST /api/v1/admin/siswa/kenaikan-kelas/preview
- * Preview dampak kenaikan kelas manual sebelum dieksekusi.
+ * 2. GET /api/v1/admin/siswa/check-nisn
  */
-adminRouter.post("/siswa/kenaikan-kelas/preview", async (c) => {
-  const body = await c.req.json().catch(() => ({}));
+export const checkAdminNisnRoute = createRoute({
+  method: "get",
+  path: "/siswa/check-nisn",
+  tags: [API_TAGS.ADMIN],
+  summary: "Check NISN Availability",
+  description: "Memeriksa ketersediaan dan keunikan NISN sebelum menyimpan data siswa baru.",
+  security: [{ BearerAuth: [] }],
+  request: {
+    query: z.object({
+      nisn: z.string().openapi({ example: "0102641001" }),
+    }),
+  },
+  responses: {
+    200: {
+      description: "Status validasi dan ketersediaan NISN",
+      content: {
+        "application/json": {
+          schema: CheckNisnResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+adminRouter.openapi(checkAdminNisnRoute, async (c) => {
+  const { nisn } = c.req.valid("query");
+  const check = await checkNisnAvailability(nisn || "");
+  return c.json(check, 200);
+});
+
+/**
+ * 3. POST /api/v1/admin/siswa
+ */
+export const createAdminStudentRoute = createRoute({
+  method: "post",
+  path: "/siswa",
+  tags: [API_TAGS.ADMIN],
+  summary: "Create New Student",
+  description: "Tambah siswa baru beserta akun login dan kartu barcode di PostgreSQL.",
+  security: [{ BearerAuth: [] }],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: CreateAdminStudentPayloadSchema,
+        },
+      },
+      required: true,
+    },
+  },
+  responses: {
+    201: {
+      description: "Siswa baru berhasil ditambahkan",
+      content: {
+        "application/json": {
+          schema: AdminStudentItemSchema,
+        },
+      },
+    },
+    400: {
+      description: "Validation error",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    409: {
+      description: "NISN sudah terdaftar",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+adminRouter.openapi(createAdminStudentRoute, async (c) => {
+  const body = c.req.valid("json");
+  const result = await createAdminStudent({
+    nisn: body.nisn,
+    nama_lengkap: body.nama_lengkap,
+    kelas: body.kelas,
+    jurusan: body.jurusan,
+    foto_profil: body.foto_profil,
+    jenis_kelamin: body.jenis_kelamin,
+  });
+
+  if (!result.ok) {
+    return c.json(
+      {
+        success: false,
+        error: {
+          code: result.status === 409 ? "DUPLICATE_NISN" : "VALIDATION_ERROR",
+          message: result.message,
+        },
+      },
+      result.status as 400 | 409
+    );
+  }
+
+  return c.json(result.data, 201);
+});
+
+/**
+ * 4. GET /api/v1/admin/siswa/:nisn
+ */
+export const getAdminStudentDetailRoute = createRoute({
+  method: "get",
+  path: "/siswa/{nisn}",
+  tags: [API_TAGS.ADMIN],
+  summary: "Get Student Detail & Card",
+  description: "Detail siswa, kartu barcode JR HC-P20, dan riwayat kenaikan kelas.",
+  security: [{ BearerAuth: [] }],
+  request: {
+    params: z.object({
+      nisn: z.string().openapi({ example: "0102641001" }),
+    }),
+  },
+  responses: {
+    200: {
+      description: "Detail siswa ditemukan",
+      content: {
+        "application/json": {
+          schema: AdminStudentDetailResponseSchema,
+        },
+      },
+    },
+    404: {
+      description: "Siswa tidak ditemukan",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+adminRouter.openapi(getAdminStudentDetailRoute, async (c) => {
+  const { nisn } = c.req.valid("param");
+  const detail = await getAdminStudentDetail(nisn);
+  if (!detail) {
+    return c.json(
+      {
+        success: false,
+        error: {
+          code: "NOT_FOUND",
+          message: `Data siswa dengan NISN/ID "${nisn}" tidak ditemukan`,
+        },
+      },
+      404
+    );
+  }
+  return c.json(detail, 200);
+});
+
+/**
+ * 5. PUT /api/v1/admin/siswa/:nisn
+ */
+export const updateAdminStudentRoute = createRoute({
+  method: "put",
+  path: "/siswa/{nisn}",
+  tags: [API_TAGS.ADMIN],
+  summary: "Update Student Information",
+  description: "Edit data siswa (Nama, Kelas, Jurusan, Foto Profil). NISN bersifat read-only.",
+  security: [{ BearerAuth: [] }],
+  request: {
+    params: z.object({
+      nisn: z.string().openapi({ example: "0102641001" }),
+    }),
+    body: {
+      content: {
+        "application/json": {
+          schema: UpdateAdminStudentPayloadSchema,
+        },
+      },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: "Data siswa berhasil diperbarui",
+      content: {
+        "application/json": {
+          schema: AdminStudentItemSchema,
+        },
+      },
+    },
+    404: {
+      description: "Siswa tidak ditemukan",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+adminRouter.openapi(updateAdminStudentRoute, async (c) => {
+  const { nisn } = c.req.valid("param");
+  const body = c.req.valid("json");
+  const result = await updateAdminStudent(nisn, body);
+  if (!result.ok) {
+    return c.json(
+      {
+        success: false,
+        error: {
+          code: result.status === 404 ? "NOT_FOUND" : "VALIDATION_ERROR",
+          message: result.message,
+        },
+      },
+      result.status as 400 | 404
+    );
+  }
+  return c.json(result.data, 200);
+});
+
+/**
+ * 6. POST /api/v1/admin/siswa/kenaikan-kelas/preview
+ */
+export const previewManualPromotionRoute = createRoute({
+  method: "post",
+  path: "/siswa/kenaikan-kelas/preview",
+  tags: [API_TAGS.ADMIN],
+  summary: "Preview Manual Class Promotion",
+  description: "Simulasi dampak kenaikan kelas manual sebelum dieksekusi.",
+  security: [{ BearerAuth: [] }],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: ManualPromotionPreviewPayloadSchema,
+        },
+      },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: "Hasil preview kenaikan kelas",
+    },
+    400: {
+      description: "Validation error",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+adminRouter.openapi(previewManualPromotionRoute, async (c) => {
+  const body = c.req.valid("json");
   const result = await previewManualPromotion({
     from_class: String(body.from_class || body.kelas_asal || ""),
     to_class: String(body.to_class || body.kelas_tujuan || ""),
@@ -370,17 +735,56 @@ adminRouter.post("/siswa/kenaikan-kelas/preview", async (c) => {
 });
 
 /**
- * POST /api/v1/admin/siswa/kenaikan-kelas/manual
- * Eksekusi kenaikan kelas manual dengan transaksi dan validasi cooldown 6 bulan.
+ * 7. POST /api/v1/admin/siswa/kenaikan-kelas/manual
  */
-adminRouter.post("/siswa/kenaikan-kelas/manual", async (c) => {
-  const body = await c.req.json().catch(() => ({}));
+export const executeManualPromotionRoute = createRoute({
+  method: "post",
+  path: "/siswa/kenaikan-kelas/manual",
+  tags: [API_TAGS.ADMIN],
+  summary: "Execute Manual Class Promotion",
+  description: "Eksekusi kenaikan kelas manual dengan transaksi database atomik dan proteksi cooldown 6 bulan.",
+  security: [{ BearerAuth: [] }],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: ManualPromotionExecutePayloadSchema,
+        },
+      },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: "Kenaikan kelas manual berhasil dieksekusi",
+    },
+    400: {
+      description: "Validation error",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    409: {
+      description: "Kenaikan kelas ditolak (cooldown)",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+adminRouter.openapi(executeManualPromotionRoute, async (c) => {
+  const body = c.req.valid("json");
   const authUser = getAuthUser(c);
   const executedBy = authUser?.username || "Admin";
 
   const result = await executeManualPromotion({
-    from_class: String(body.from_class || body.kelas_asal || ""),
-    to_class: String(body.to_class || body.kelas_tujuan || ""),
+    from_class: String(body.from_class || ""),
+    to_class: String(body.to_class || ""),
     tahun_ajaran: body.tahun_ajaran ? String(body.tahun_ajaran) : undefined,
     catatan: body.catatan || body.keterangan ? String(body.catatan || body.keterangan) : undefined,
     executed_by: executedBy,
@@ -430,85 +834,6 @@ adminRouter.post("/siswa/kenaikan-kelas/otomatis/trigger", async (c) => {
   });
 
   return c.json(res, 200);
-});
-
-/**
- * POST /api/v1/admin/siswa
- * Tambah siswa baru beserta pembuatan akun login siswa (password default gc123).
- */
-adminRouter.post("/siswa", async (c) => {
-  const body = await c.req.json().catch(() => ({}));
-  const result = await createAdminStudent({
-    nisn: String(body.nisn || ""),
-    nama_lengkap: String(body.nama_lengkap || body.nama_siswa || ""),
-    kelas: String(body.kelas || ""),
-    jurusan: body.jurusan ? String(body.jurusan) : undefined,
-    foto_profil: body.foto_profil ? String(body.foto_profil) : undefined,
-    jenis_kelamin: body.jenis_kelamin ? String(body.jenis_kelamin) : undefined,
-  });
-
-  if (!result.ok) {
-    return c.json(
-      {
-        success: false,
-        error: {
-          code: result.status === 409 ? "DUPLICATE_NISN" : "VALIDATION_ERROR",
-          message: result.message,
-        },
-      },
-      result.status as 400 | 409
-    );
-  }
-
-  return c.json(result.data, 201);
-});
-
-/**
- * GET /api/v1/admin/siswa/:nisn
- * Detail siswa, informasi kartu identitas siswa, dan riwayat kenaikan kelas siswa.
- */
-adminRouter.get("/siswa/:nisn", async (c) => {
-  const nisn = c.req.param("nisn");
-  const detail = await getAdminStudentDetail(nisn);
-  if (!detail) {
-    return c.json(
-      {
-        success: false,
-        error: {
-          code: "NOT_FOUND",
-          message: `Data siswa dengan NISN/ID "${nisn}" tidak ditemukan`,
-        },
-      },
-      404
-    );
-  }
-
-  return c.json(detail, 200);
-});
-
-/**
- * PUT /api/v1/admin/siswa/:nisn
- * Edit data siswa (Nama Lengkap, Kelas, Jurusan, Foto Profil). NISN bersifat READ-ONLY.
- */
-adminRouter.put("/siswa/:nisn", async (c) => {
-  const nisn = c.req.param("nisn");
-  const body = await c.req.json().catch(() => ({}));
-
-  const result = await updateAdminStudent(nisn, body);
-  if (!result.ok) {
-    return c.json(
-      {
-        success: false,
-        error: {
-          code: result.status === 404 ? "NOT_FOUND" : "VALIDATION_ERROR",
-          message: result.message,
-        },
-      },
-      result.status as 400 | 404
-    );
-  }
-
-  return c.json(result.data, 200);
 });
 
 /**
