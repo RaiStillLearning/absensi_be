@@ -184,10 +184,12 @@ async function runMigrationsAndSeed(): Promise<void> {
         await syncPgliteBaselineMigrationIfTablesExist(pgliteClient, MIGRATIONS_FOLDER);
         await migratePglite(pgliteDb, { migrationsFolder: MIGRATIONS_FOLDER });
       } catch (pgliteMigrationErr: any) {
+        const code = pgliteMigrationErr?.code || pgliteMigrationErr?.cause?.code;
+        const msg = String(pgliteMigrationErr?.message || "") + " " + String(pgliteMigrationErr?.cause?.message || "");
         const isDuplicate =
-          pgliteMigrationErr?.code === "42P07" ||
-          pgliteMigrationErr?.code === "42710" ||
-          String(pgliteMigrationErr?.message || "").includes("already exists");
+          code === "42P07" ||
+          code === "42710" ||
+          msg.includes("already exists");
         if (!isDuplicate) throw pgliteMigrationErr;
       }
     }
@@ -198,10 +200,12 @@ async function runMigrationsAndSeed(): Promise<void> {
         await syncPostgresBaselineMigrationIfTablesExist(queryClient, MIGRATIONS_FOLDER);
         await migratePostgres(activeDb, { migrationsFolder: MIGRATIONS_FOLDER });
       } catch (migrationErr: any) {
+        const code = migrationErr?.code || migrationErr?.cause?.code;
+        const msg = String(migrationErr?.message || "") + " " + String(migrationErr?.cause?.message || "");
         const isDuplicateRelation =
-          migrationErr?.code === "42P07" ||
-          migrationErr?.code === "42710" ||
-          String(migrationErr?.message || "").includes("already exists");
+          code === "42P07" ||
+          code === "42710" ||
+          msg.includes("already exists");
 
         if (isDuplicateRelation && queryClient) {
           console.warn(

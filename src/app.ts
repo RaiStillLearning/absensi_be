@@ -41,14 +41,10 @@ app.use("*", async (_c, next) => {
   await next();
 });
 
-// Configure CORS for frontend client & internal dashboard tools
+// Configure CORS for frontend client
 const allowedOrigins = env.CORS_ORIGIN.split(",")
   .map((o) => o.trim())
   .filter(Boolean);
-const selfOrigin = `http://localhost:${env.APP_PORT}`;
-if (!allowedOrigins.includes(selfOrigin)) {
-  allowedOrigins.push(selfOrigin);
-}
 app.use(
   "*",
   cors({
@@ -67,9 +63,6 @@ app.use(
     credentials: true,
   })
 );
-
-// Favicon handler to prevent noisy 404 logs from browser navigation
-app.get("/favicon.ico", (c) => c.body(null, 204));
 
 // Proteksi CSRF untuk request mutasi berbasis cookie (kecuali endpoint login awal dan scanner API non-cookie)
 app.use(
