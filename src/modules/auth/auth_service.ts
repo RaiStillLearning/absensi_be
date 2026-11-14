@@ -112,6 +112,7 @@ async function buildUserSessionContext(dbUser: typeof users.$inferSelect): Promi
       profile: {
         id: String(teacherRow.id),
         username: dbUser.username,
+        nip: teacherRow.nip || dbUser.username,
         role: "guru",
         peran: isWalas ? "Wali Kelas" : "Guru",
         nama_lengkap: teacherRow.nama_guru || dbUser.nama_lengkap || "",
@@ -120,6 +121,7 @@ async function buildUserSessionContext(dbUser: typeof users.$inferSelect): Promi
         foto_profil: teacherRow.foto_profil || "",
         isWalas,
         kelasWalas,
+        kelas_diampu: kelasWalas,
         must_change_password: Boolean(dbUser.must_change_password),
       },
     };
@@ -168,6 +170,7 @@ async function buildUserSessionContext(dbUser: typeof users.$inferSelect): Promi
       nama_lengkap: studentRow.full_name,
       email: studentRow.email,
       nisn: studentRow.nisn,
+      nis: studentRow.nis,
       kelas: className,
       jurusan: studentRow.jurusan,
       foto_profil: studentRow.foto_profil || "",
@@ -517,6 +520,7 @@ export async function getUserProfile(
     return {
       id: String(guru.id),
       username: guru.nip || "guru",
+      nip: guru.nip || "guru",
       role: "guru",
       peran: guru.is_walas ? "Wali Kelas" : "Guru",
       nama_lengkap: guru.nama_guru,
@@ -525,6 +529,7 @@ export async function getUserProfile(
       foto_profil: guru.foto_profil || "",
       isWalas: Boolean(guru.is_walas),
       kelasWalas: guru.kelas_walas || "",
+      kelas_diampu: guru.kelas_walas || "",
     };
   }
 
@@ -549,6 +554,7 @@ export async function getUserProfile(
     nama_lengkap: studentRow.full_name,
     email: studentRow.email,
     nisn: studentRow.nisn,
+    nis: studentRow.nis,
     kelas: studentRow.kelas,
     jurusan: studentRow.jurusan,
     foto_profil: studentRow.foto_profil || "",

@@ -508,7 +508,28 @@ authRouter.openapi(refreshRoute, async (c) => {
  * 6. POST /api/v1/auth/logout
  * Mengakhiri seluruh sesi terkait dan mencabut Refresh Token di database serta menghapus cookie.
  */
-authRouter.post("/logout", async (c) => {
+export const logoutRoute = createRoute({
+  method: "post",
+  path: "/logout",
+  tags: [API_TAGS.AUTHENTICATION],
+  summary: "Logout Current User & Invalidate Sessions",
+  description: "Revokes active refresh tokens and user sessions, clears authentication cookies.",
+  responses: {
+    200: {
+      description: "Logout successful",
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+  },
+});
+
+authRouter.openapi(logoutRoute, async (c) => {
   const authUser = await authenticateRequest(c);
   if (authUser) {
     await revokeAllUserSessions(authUser.uid, "manual_logout");
@@ -630,7 +651,56 @@ authRouter.openapi(
 /**
  * 8. POST /api/v1/auth/profil/foto
  */
-authRouter.post("/profil/foto", async (c) => {
+export const uploadProfilePhotoRoute = createRoute({
+  method: "post",
+  path: "/profil/foto",
+  tags: [API_TAGS.AUTHENTICATION],
+  summary: "Upload User Profile Photo",
+  description: "Uploads and updates authenticated user avatar photo (JPEG/PNG, max 1MB via multipart/form-data).",
+  security: [{ BearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Profile photo uploaded successfully",
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean(),
+            message: z.string(),
+            data: z.object({
+              foto_profil: z.string(),
+            }),
+          }),
+        },
+      },
+    },
+    400: {
+      description: "Invalid file or upload processing error",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    401: {
+      description: "Unauthorized",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    404: {
+      description: "User account not found",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+authRouter.openapi(uploadProfilePhotoRoute, async (c) => {
   const authUser = getAuthUser(c);
   if (!authUser) {
     return c.json({ success: false, message: "Akses ditolak: Token autentikasi diperlukan" }, 401);
@@ -693,7 +763,48 @@ authRouter.post("/profil/foto", async (c) => {
 /**
  * 9. DELETE /api/v1/auth/profil/foto
  */
-authRouter.delete("/profil/foto", async (c) => {
+export const deleteProfilePhotoRoute = createRoute({
+  method: "delete",
+  path: "/profil/foto",
+  tags: [API_TAGS.AUTHENTICATION],
+  summary: "Delete User Profile Photo",
+  description: "Deletes current user avatar photo and resets to default.",
+  security: [{ BearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Profile photo removed successfully",
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean(),
+            message: z.string(),
+            data: z.object({
+              foto_profil: z.string(),
+            }),
+          }),
+        },
+      },
+    },
+    401: {
+      description: "Unauthorized",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    404: {
+      description: "User account not found",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+authRouter.openapi(deleteProfilePhotoRoute, async (c) => {
   const authUser = getAuthUser(c);
   if (!authUser) {
     return c.json({ success: false, message: "Akses ditolak: Token autentikasi diperlukan" }, 401);

@@ -83,7 +83,7 @@
           "access_token": {
             "type": "string",
             "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-            "description": "JWT access token valid for API requests"
+            "description": "Short-lived JWT access token (15 minutes)"
           },
           "token_type": {
             "type": "string",
@@ -92,6 +92,18 @@
             ],
             "example": "Bearer"
           },
+          "expires_in": {
+            "type": "integer",
+            "example": 900
+          },
+          "remember_me": {
+            "type": "boolean",
+            "example": false
+          },
+          "session_expires_at": {
+            "type": "string",
+            "example": "2026-11-13T23:30:00.000Z"
+          },
           "user": {
             "$ref": "#/components/schemas/AuthUserProfile"
           }
@@ -99,6 +111,9 @@
         "required": [
           "access_token",
           "token_type",
+          "expires_in",
+          "remember_me",
+          "session_expires_at",
           "user"
         ]
       },
@@ -138,10 +153,19 @@
           "kelasWalas": {
             "type": "string"
           },
+          "kelas_diampu": {
+            "type": "string"
+          },
           "mata_pelajaran": {
             "type": "string"
           },
+          "nip": {
+            "type": "string"
+          },
           "nisn": {
+            "type": "string"
+          },
+          "nis": {
             "type": "string"
           },
           "kelas": {
@@ -149,6 +173,32 @@
           },
           "jurusan": {
             "type": "string"
+          },
+          "must_change_password": {
+            "type": "boolean"
+          },
+          "student": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "nisn": {
+                "type": "string"
+              },
+              "full_name": {
+                "type": "string"
+              },
+              "class_name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "nisn",
+              "full_name",
+              "class_name"
+            ]
           }
         },
         "required": [
@@ -163,22 +213,34 @@
         "type": "object",
         "properties": {
           "nisn_atau_username": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 150
           },
           "username": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 150
           },
           "nisn": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 150
           },
           "nip": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 150
           },
           "kata_sandi": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 128
           },
           "password": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 128
+          },
+          "remember_me": {
+            "type": "boolean"
+          },
+          "rememberMe": {
+            "type": "boolean"
           }
         }
       },
@@ -201,6 +263,31 @@
           "success",
           "message",
           "data"
+        ]
+      },
+      "ChangePasswordRequest": {
+        "type": "object",
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "new_password": {
+            "type": "string",
+            "minLength": 6,
+            "maxLength": 128
+          },
+          "confirm_password": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "current_password",
+          "new_password",
+          "confirm_password"
         ]
       },
       "KelasItem": {
@@ -504,7 +591,7 @@
         "properties": {
           "no": {
             "type": "number",
-            "example": 1
+            "nullable": true
           },
           "id": {
             "type": "string",
@@ -533,7 +620,6 @@
           }
         },
         "required": [
-          "no",
           "id",
           "nama_siswa",
           "nisn",
@@ -1246,7 +1332,7 @@
           "Authentication"
         ],
         "summary": "Unified Login for Admin, Guru, and Siswa",
-        "description": "Authenticates any school user and returns signed JWT access token and user profile",
+        "description": "Authenticates user (Admin, Guru, Walas, or Siswa by NISN/Nama), issues 15m JWT access token & HttpOnly session cookies.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1367,6 +1453,106 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Ambiguous student name (must login with NISN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many login attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -1386,13 +1572,23 @@
                 "type": "object",
                 "properties": {
                   "nip": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 150
                   },
                   "nipInput": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 150
                   },
                   "password": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "remember_me": {
+                    "type": "boolean"
+                  },
+                  "rememberMe": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -1512,6 +1708,56 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -1522,7 +1768,7 @@
           "Authentication",
           "Siswa"
         ],
-        "summary": "Student Direct Login",
+        "summary": "Student Direct Login (NISN or Nama Siswa)",
         "requestBody": {
           "required": true,
           "content": {
@@ -1531,10 +1777,20 @@
                 "type": "object",
                 "properties": {
                   "nisn": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 150
                   },
                   "password": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "remember_me": {
+                    "type": "boolean"
+                  },
+                  "rememberMe": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -1608,6 +1864,106 @@
           },
           "403": {
             "description": "Account inactive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ambiguous student name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
             "content": {
               "application/json": {
                 "schema": {
@@ -1734,6 +2090,696 @@
         }
       }
     },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Refresh JWT Access Token & Rotate Refresh Token",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "refresh_token": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token refreshed & rotated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "access_token": {
+                      "type": "string"
+                    },
+                    "expires_in": {
+                      "type": "number"
+                    },
+                    "remember_me": {
+                      "type": "boolean"
+                    },
+                    "session_expires_at": {
+                      "type": "string"
+                    },
+                    "user": {
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "access_token",
+                    "expires_in",
+                    "remember_me",
+                    "session_expires_at"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired refresh token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Logout Current User & Invalidate Sessions",
+        "description": "Revokes active refresh tokens and user sessions, clears authentication cookies.",
+        "responses": {
+          "200": {
+            "description": "Logout successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/change-password": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Change Authenticated User Password",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation or current password error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/profil/foto": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Upload User Profile Photo",
+        "description": "Uploads and updates authenticated user avatar photo (JPEG/PNG, max 1MB via multipart/form-data).",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile photo uploaded successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "foto_profil": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "foto_profil"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid file or upload processing error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User account not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Delete User Profile Photo",
+        "description": "Deletes current user avatar photo and resets to default.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile photo removed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "foto_profil": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "foto_profil"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User account not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/dashboard/stats": {
       "get": {
         "tags": [
@@ -1741,7 +2787,7 @@
           "General"
         ],
         "summary": "Get Dashboard Statistics Summary",
-        "description": "Returns summary counts for students, teachers, classes, and attendance percentage",
+        "description": "Returns summary counts for students, teachers, classes, and attendance percentage from PostgreSQL",
         "responses": {
           "200": {
             "description": "Dashboard stats retrieved successfully",
@@ -1756,7 +2802,7 @@
                     },
                     "total_guru": {
                       "type": "number",
-                      "example": 28
+                      "example": 12
                     },
                     "total_kelas": {
                       "type": "number",
@@ -1791,7 +2837,7 @@
           "Admin"
         ],
         "summary": "Get 5-Day Attendance Recap",
-        "description": "Returns 5-day daily attendance chart data (hadir, izin, sakit, alpha)",
+        "description": "Returns 5-day daily attendance chart data (hadir, izin, sakit, alpha) from PostgreSQL",
         "responses": {
           "200": {
             "description": "Recap data retrieved successfully",
@@ -1844,7 +2890,7 @@
           "Admin"
         ],
         "summary": "Get Recent System Activities",
-        "description": "Returns recent school activity logs",
+        "description": "Returns recent school activity logs from PostgreSQL",
         "responses": {
           "200": {
             "description": "Activities retrieved successfully",
@@ -1895,7 +2941,7 @@
           "Admin"
         ],
         "summary": "Get Today's Attendance Summary",
-        "description": "Returns today's high-level attendance recap for all classes",
+        "description": "Returns today's high-level attendance recap for all classes from PostgreSQL",
         "responses": {
           "200": {
             "description": "Summary retrieved successfully",
@@ -1948,7 +2994,7 @@
           "Admin"
         ],
         "summary": "List All School Classes",
-        "description": "Returns master list of all classes in the school",
+        "description": "Returns master list of all classes in the school from PostgreSQL",
         "responses": {
           "200": {
             "description": "List of classes retrieved",
@@ -1970,7 +3016,7 @@
           "Admin"
         ],
         "summary": "Create New Class",
-        "description": "Creates a new class entry",
+        "description": "Creates a new class entry in PostgreSQL",
         "requestBody": {
           "required": true,
           "content": {
@@ -2313,7 +3359,7 @@
           "Guru"
         ],
         "summary": "List All Teachers",
-        "description": "Returns master list of teachers with subject and homeroom class roles",
+        "description": "Returns master list of teachers from PostgreSQL",
         "responses": {
           "200": {
             "description": "List of teachers retrieved",
@@ -2347,7 +3393,7 @@
         },
         "responses": {
           "201": {
-            "description": "Teacher created successfully",
+            "description": "Teacher created successfully in PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -2416,7 +3462,7 @@
           "Walas"
         ],
         "summary": "Get Current Teacher Profile",
-        "description": "Returns profile details for teacher / homeroom teacher",
+        "description": "Returns profile details for teacher / homeroom teacher from PostgreSQL",
         "responses": {
           "200": {
             "description": "Teacher profile retrieved",
@@ -2544,11 +3590,61 @@
         },
         "responses": {
           "200": {
-            "description": "Teacher profile updated",
+            "description": "Teacher profile updated in PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GuruProfile"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid profile photo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
                 }
               }
             }
@@ -2564,12 +3660,15 @@
         "summary": "Get Teacher Dashboard Overview",
         "responses": {
           "200": {
-            "description": "Teacher dashboard retrieved",
+            "description": "Teacher dashboard retrieved from PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "profil": {
+                      "$ref": "#/components/schemas/GuruProfile"
+                    },
                     "guru": {
                       "$ref": "#/components/schemas/GuruProfile"
                     },
@@ -2637,7 +3736,7 @@
                     }
                   },
                   "required": [
-                    "guru",
+                    "profil",
                     "kelas_aktif",
                     "rekap"
                   ]
@@ -2675,8 +3774,7 @@
           },
           {
             "schema": {
-              "type": "string",
-              "default": "2026-06-06"
+              "type": "string"
             },
             "required": false,
             "name": "tanggal",
@@ -2685,7 +3783,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Student attendance session list",
+            "description": "Student attendance session list from PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -2727,13 +3825,18 @@
                     "items": {
                       "$ref": "#/components/schemas/SiswaAbsensiItem"
                     }
+                  },
+                  "siswa_list": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/SiswaAbsensiItem"
+                    }
                   }
                 },
                 "required": [
                   "kelas",
                   "mapel",
-                  "tanggal",
-                  "siswa"
+                  "tanggal"
                 ]
               }
             }
@@ -2741,7 +3844,7 @@
         },
         "responses": {
           "200": {
-            "description": "Attendance session saved successfully",
+            "description": "Attendance session saved successfully in PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -2772,12 +3875,22 @@
         }
       }
     },
-    "/api/v1/guru/absensi/status": {
-      "put": {
+    "/api/v1/guru/absensi/:id": {
+      "patch": {
         "tags": [
           "Guru"
         ],
-        "summary": "Update Individual Student Attendance Status",
+        "summary": "Update Student Attendance in Subject Session via Patch",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -2785,18 +3898,6 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "kelas": {
-                    "type": "string"
-                  },
-                  "mapel": {
-                    "type": "string"
-                  },
-                  "tanggal": {
-                    "type": "string"
-                  },
-                  "siswa_id": {
-                    "type": "string"
-                  },
                   "status": {
                     "type": "string",
                     "enum": [
@@ -2805,13 +3906,20 @@
                       "Sakit",
                       "Alpa"
                     ]
+                  },
+                  "kelas": {
+                    "type": "string",
+                    "default": "X RPL 1"
+                  },
+                  "mapel": {
+                    "type": "string",
+                    "default": "Pemrograman Web"
+                  },
+                  "tanggal": {
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "kelas",
-                  "mapel",
-                  "tanggal",
-                  "siswa_id",
                   "status"
                 ]
               }
@@ -2820,7 +3928,7 @@
         },
         "responses": {
           "200": {
-            "description": "Student status updated",
+            "description": "Student status updated in PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -2842,9 +3950,7 @@
             }
           }
         }
-      }
-    },
-    "/api/v1/guru/absensi/:id": {
+      },
       "delete": {
         "tags": [
           "Guru"
@@ -2879,8 +3985,7 @@
           },
           {
             "schema": {
-              "type": "string",
-              "default": "2026-06-06"
+              "type": "string"
             },
             "required": false,
             "name": "tanggal",
@@ -2889,7 +3994,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Student removed from session",
+            "description": "Student removed from session in PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -2940,8 +4045,7 @@
           },
           {
             "schema": {
-              "type": "string",
-              "default": "2026-06-06"
+              "type": "string"
             },
             "required": false,
             "name": "tanggal",
@@ -2950,7 +4054,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Recapitulation report data",
+            "description": "Recapitulation report data from PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -3068,7 +4172,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Teacher details retrieved",
+            "description": "Teacher details retrieved from PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -3157,7 +4261,7 @@
         },
         "responses": {
           "200": {
-            "description": "Teacher updated successfully",
+            "description": "Teacher updated successfully in PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -3236,7 +4340,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Teacher deleted successfully",
+            "description": "Teacher deleted successfully from PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -3336,7 +4440,7 @@
         ],
         "responses": {
           "200": {
-            "description": "List of schedules",
+            "description": "List of schedules from PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -3742,7 +4846,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Attendance records and summary retrieved successfully",
+            "description": "Attendance records and summary retrieved successfully from PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -3835,6 +4939,56 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid profile photo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -3847,7 +5001,7 @@
         "summary": "Get Homeroom Teacher Dashboard",
         "responses": {
           "200": {
-            "description": "Homeroom dashboard retrieved",
+            "description": "Homeroom dashboard retrieved from PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -3908,8 +5062,7 @@
         "parameters": [
           {
             "schema": {
-              "type": "string",
-              "default": "2026-06-05"
+              "type": "string"
             },
             "required": false,
             "name": "tanggal",
@@ -3935,7 +5088,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Monitoring list and stats",
+            "description": "Monitoring list and stats from PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -4040,7 +5193,7 @@
         },
         "responses": {
           "200": {
-            "description": "Student status updated",
+            "description": "Student status updated in PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -4134,7 +5287,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Student removed",
+            "description": "Student removed from PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -4166,7 +5319,7 @@
         "summary": "Get Monthly Attendance Recap for Homeroom Class",
         "responses": {
           "200": {
-            "description": "Monthly recap data",
+            "description": "Monthly recap data from PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -4298,7 +5451,7 @@
         },
         "responses": {
           "200": {
-            "description": "Homeroom attendance saved",
+            "description": "Homeroom attendance saved in PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -4330,11 +5483,61 @@
         "summary": "Get Current Student Profile",
         "responses": {
           "200": {
-            "description": "Student profile retrieved",
+            "description": "Student profile retrieved from PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SiswaProfile"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Student not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
                 }
               }
             }
@@ -4431,11 +5634,111 @@
         },
         "responses": {
           "200": {
-            "description": "Student profile updated",
+            "description": "Student profile updated in PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SiswaProfile"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid profile photo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Student not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
                 }
               }
             }
@@ -4451,7 +5754,7 @@
         "summary": "Get Student Attendance Summary Metrics",
         "responses": {
           "200": {
-            "description": "Student attendance metrics retrieved",
+            "description": "Student attendance metrics retrieved from PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -4493,6 +5796,56 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Student not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -4505,7 +5858,7 @@
         "summary": "Get Today's Lessons for Student",
         "responses": {
           "200": {
-            "description": "Today's lessons",
+            "description": "Today's lessons from PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -4543,6 +5896,56 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Student not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -4555,7 +5958,7 @@
         "summary": "Get Complete Weekly Schedule (Monday - Friday)",
         "responses": {
           "200": {
-            "description": "Weekly schedule retrieved",
+            "description": "Weekly schedule retrieved from PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -4608,6 +6011,56 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Student not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -4620,7 +6073,7 @@
         "summary": "Get Realtime Student Attendance Check-in Status",
         "responses": {
           "200": {
-            "description": "Realtime attendance status",
+            "description": "Realtime attendance status from PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -4656,6 +6109,56 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Student not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -4674,11 +6177,19 @@
             "required": false,
             "name": "tanggal",
             "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "bulan",
+            "in": "query"
           }
         ],
         "responses": {
           "200": {
-            "description": "Attendance history records",
+            "description": "Attendance history records from PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -4713,6 +6224,56 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Student not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -4736,7 +6297,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Monthly recap and breakdown retrieved",
+            "description": "Monthly recap and breakdown retrieved from PostgreSQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -4811,6 +6372,56 @@
                     "totalPencatatan",
                     "persentaseHadir",
                     "breakdown"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Student not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "An error occurred"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "username"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Field is required"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "field": "username",
+                          "message": "Field is required"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
                   ]
                 }
               }
