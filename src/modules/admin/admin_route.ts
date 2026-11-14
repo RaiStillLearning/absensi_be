@@ -809,11 +809,56 @@ adminRouter.openapi(executeManualPromotionRoute, async (c) => {
 });
 
 /**
- * POST /api/v1/admin/siswa/kenaikan-kelas/otomatis/trigger
+ * 8. POST /api/v1/admin/siswa/kenaikan-kelas/otomatis/trigger
  * Endpoint pemicu scheduler kenaikan kelas otomatis (Mei = Lulus Kelas 12, Juni = Naik Kelas 10->11 & 11->12).
  */
-adminRouter.post("/siswa/kenaikan-kelas/otomatis/trigger", async (c) => {
-  const body = await c.req.json().catch(() => ({}));
+export const triggerAutomaticPromotionRoute = createRoute({
+  method: "post",
+  path: "/siswa/kenaikan-kelas/otomatis/trigger",
+  tags: [API_TAGS.ADMIN],
+  summary: "Trigger Automatic Promotion Job",
+  description: "Memicu eksekusi job kelulusan kelas 12 dan kenaikan kelas 10->11, 11->12.",
+  security: [{ BearerAuth: [] }],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            reference_date: z.string().optional().openapi({ example: "2026-06-30" }),
+            force_run: z.boolean().optional().openapi({ example: false }),
+          }),
+        },
+      },
+      required: false,
+    },
+  },
+  responses: {
+    200: {
+      description: "Job otomatis kenaikan kelas berhasil diproses",
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean(),
+            message: z.string(),
+            executed: z.boolean(),
+            promoted_count: z.number().optional(),
+          }),
+        },
+      },
+    },
+    400: {
+      description: "Format tanggal tidak valid",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+adminRouter.openapi(triggerAutomaticPromotionRoute, async (c) => {
+  const body = c.req.valid("json") || {};
   const refDate = body.reference_date ? new Date(String(body.reference_date)) : undefined;
   if (refDate && Number.isNaN(refDate.getTime())) {
     return c.json(
@@ -833,15 +878,69 @@ adminRouter.post("/siswa/kenaikan-kelas/otomatis/trigger", async (c) => {
     forceRun: Boolean(body.force_run),
   });
 
-  return c.json(res, 200);
+  return c.json(res as any, 200);
 });
 
 /**
- * POST /api/v1/admin/siswa/:nisn/foto
+ * 9. POST /api/v1/admin/siswa/{nisn}/foto
  * Upload foto profil siswa menggunakan multipart/form-data (maks 1MB, JPG/JPEG/PNG).
  */
-adminRouter.post("/siswa/:nisn/foto", async (c) => {
-  const nisn = c.req.param("nisn");
+export const uploadAdminStudentPhotoRoute = createRoute({
+  method: "post",
+  path: "/siswa/{nisn}/foto",
+  tags: [API_TAGS.ADMIN],
+  summary: "Upload Student Profile Photo",
+  description: "Upload foto profil siswa via multipart/form-data (maks 1MB, format JPG/PNG).",
+  security: [{ BearerAuth: [] }],
+  request: {
+    params: z.object({
+      nisn: z.string().openapi({ example: "0102641001" }),
+    }),
+    body: {
+      content: {
+        "multipart/form-data": {
+          schema: z.object({
+            file: z.any().openapi({ type: "string", format: "binary" }),
+          }),
+        },
+      },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: "Foto profil siswa berhasil diunggah",
+      content: {
+        "application/json": {
+          schema: z.object({
+            ok: z.boolean(),
+            foto_profil: z.string(),
+            data: AdminStudentItemSchema,
+          }),
+        },
+      },
+    },
+    400: {
+      description: "Validasi file gagal",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    404: {
+      description: "Siswa tidak ditemukan",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+adminRouter.openapi(uploadAdminStudentPhotoRoute, async (c) => {
+  const { nisn } = c.req.valid("param");
   const formData = await c.req.formData().catch(() => null);
   const file = formData?.get("file") || formData?.get("foto");
 
@@ -872,5 +971,5 @@ adminRouter.post("/siswa/:nisn/foto", async (c) => {
     );
   }
 
-  return c.json(result, 200);
+  return c.json(result as any, 200);
 });
