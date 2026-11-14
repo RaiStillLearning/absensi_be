@@ -14,7 +14,7 @@ describe("Security Audit & RBAC Permissions Test Suite", () => {
       body: JSON.stringify({ nisn_atau_username: "admin", kata_sandi: "admin123" }),
     });
     expect(adminRes.status).toBe(200);
-    const adminJson = await adminRes.json();
+    const adminJson = (await adminRes.json()) as any;
     adminToken = adminJson.access_token;
     expect(adminToken).toBeDefined();
 
@@ -25,7 +25,7 @@ describe("Security Audit & RBAC Permissions Test Suite", () => {
       body: JSON.stringify({ nisn_atau_username: "198905122015012008", kata_sandi: "guru123" }),
     });
     expect(guruRes.status).toBe(200);
-    const guruJson = await guruRes.json();
+    const guruJson = (await guruRes.json()) as any;
     guruToken = guruJson.access_token;
     expect(guruToken).toBeDefined();
 
@@ -39,7 +39,7 @@ describe("Security Audit & RBAC Permissions Test Suite", () => {
       }),
     });
     expect(siswaRes.status).toBe(200);
-    const siswaJson = await siswaRes.json();
+    const siswaJson = (await siswaRes.json()) as any;
     siswaToken = siswaJson.access_token;
     expect(siswaToken).toBeDefined();
   });
@@ -151,7 +151,7 @@ describe("Security Audit & RBAC Permissions Test Suite", () => {
       headers: { Authorization: `Bearer ${adminToken}` },
     });
     expect(adminHistory.status).toBe(200);
-    const adminHistoryJson = await adminHistory.json();
+    const adminHistoryJson = (await adminHistory.json()) as any;
     expect(adminHistoryJson.success).toBe(true);
     expect(Array.isArray(adminHistoryJson.items)).toBe(true);
     expect(adminHistoryJson.pagination).toBeDefined();
@@ -161,7 +161,7 @@ describe("Security Audit & RBAC Permissions Test Suite", () => {
       headers: { Authorization: `Bearer ${siswaToken}` },
     });
     expect(siswaHistory.status).toBe(200);
-    const siswaHistoryJson = await siswaHistory.json();
+    const siswaHistoryJson = (await siswaHistory.json()) as any;
     expect(siswaHistoryJson.success).toBe(true);
     expect(Array.isArray(siswaHistoryJson.data)).toBe(true);
 
@@ -170,7 +170,7 @@ describe("Security Audit & RBAC Permissions Test Suite", () => {
       headers: { Authorization: `Bearer ${guruToken}` }, // guruToken memiliki is_walas: true
     });
     expect(walasHistory.status).toBe(200);
-    const walasHistoryJson = await walasHistory.json();
+    const walasHistoryJson = (await walasHistory.json()) as any;
     expect(walasHistoryJson.success).toBe(true);
     expect(Array.isArray(walasHistoryJson.data)).toBe(true);
   });

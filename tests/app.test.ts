@@ -1,7 +1,11 @@
-import { describe, expect, it } from "bun:test";
+import { beforeAll, describe, expect, it } from "bun:test";
 import { app } from "../src/app";
+import { ensureDatabaseInitialized } from "../src/config/database";
 
 describe("SMK Ghama Caraka Backend Foundation", () => {
+  beforeAll(async () => {
+    await ensureDatabaseInitialized();
+  }, 30000);
   it("should return healthy status on GET /health", async () => {
     const res = await app.request("/health");
     expect(res.status).toBe(200);

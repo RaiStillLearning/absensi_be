@@ -605,6 +605,7 @@ export const getRiwayatKehadiranRoute = createRoute({
   request: {
     query: z.object({
       tanggal: z.string().optional(),
+      bulan: z.string().optional(),
     }),
   },
   responses: {
@@ -636,6 +637,7 @@ export const getRiwayatKehadiranRoute = createRoute({
 });
 
 siswaRouter.openapi(getRiwayatKehadiranRoute, async (c) => {
+  const { tanggal, bulan } = c.req.valid("query");
   const st = await getStudentFromContext(c);
   if (!st) {
     return c.json({ success: false, message: "Data siswa tidak ditemukan" }, 404);
@@ -653,6 +655,13 @@ siswaRouter.openapi(getRiwayatKehadiranRoute, async (c) => {
       .where(eq(daily_attendance_records.student_id, st.id));
 
     for (const r of dailyRecords) {
+      const recDate = new Date(r.check_in_at);
+      const isoDay = recDate.toISOString().slice(0, 10);
+      const isoMonth = isoDay.slice(0, 7);
+
+      if (tanggal && isoDay !== tanggal) continue;
+      if (bulan && isoMonth !== bulan) continue;
+
       const stLabel =
         r.attendance_status === "present"
           ? "Hadir"
@@ -663,7 +672,7 @@ siswaRouter.openapi(getRiwayatKehadiranRoute, async (c) => {
               : "Alpa";
       history.push({
         id: `rk-${r.id.slice(0, 8)}`,
-        tanggal: new Date(r.check_in_at).toLocaleDateString("id-ID"),
+        tanggal: recDate.toLocaleDateString("id-ID"),
         jam: r.jam_masuk ? `${r.jam_masuk} WIB` : "06:45 WIB",
         status: stLabel,
         keterangan: r.keterangan || "Tepat waktu",
@@ -683,6 +692,10 @@ siswaRouter.openapi(getRiwayatKehadiranRoute, async (c) => {
 
   let idx = 1;
   for (const sr of subjectRecords) {
+    const srIsoMonth = sr.tanggal.slice(0, 7);
+    if (tanggal && sr.tanggal !== tanggal) continue;
+    if (bulan && srIsoMonth !== bulan) continue;
+
     history.push({
       id: `rk-sesi-${idx++}`,
       tanggal: sr.tanggal,

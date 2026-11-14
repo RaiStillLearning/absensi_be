@@ -1,3 +1,4 @@
+import { describe, expect, it } from "bun:test";
 import { app } from "../src/app";
 
 async function runTests() {
@@ -100,7 +101,12 @@ async function runTests() {
   await testEndpoint("Siswa Riwayat Kenaikan Alias", "/api/v1/siswa/riwayat-kenaikan-kelas", { headers: siswaHeaders });
 
   console.log(`\n🎉 Test Summary: ${passed} Passed, ${failed} Failed`);
-  process.exit(failed > 0 ? 1 : 0);
+  return failed === 0;
 }
 
-runTests();
+describe("Frontend API Integration Suite", () => {
+  it("should successfully execute all frontend integration endpoints", async () => {
+    const success = await runTests();
+    expect(success).toBe(true);
+  }, 60000);
+});

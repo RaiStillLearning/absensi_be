@@ -516,7 +516,8 @@ export const getGuruDashboardRoute = createRoute({
       content: {
         "application/json": {
           schema: z.object({
-            guru: GuruProfileSchema,
+            profil: GuruProfileSchema,
+            guru: GuruProfileSchema.optional(),
             kelas_aktif: z.object({
               id: z.string(),
               nama_kelas: z.string(),
@@ -563,6 +564,7 @@ guruRouter.openapi(getGuruDashboardRoute, async (c) => {
 
   return c.json(
     {
+      profil: profile,
       guru: profile,
       kelas_aktif: {
         id: "kls-1",
@@ -786,73 +788,7 @@ guruRouter.openapi(patchGuruAbsensiStudentRoute, async (c) => {
   );
 });
 
-/**
- * 8. PUT /api/v1/guru/absensi/status
- */
-export const updateGuruAbsensiStatusRoute = createRoute({
-  method: "put",
-  path: "/absensi/status",
-  tags: [API_TAGS.GURU],
-  summary: "Update Individual Student Attendance Status",
-  request: {
-    body: {
-      content: {
-        "application/json": {
-          schema: z.object({
-            kelas: z.string(),
-            mapel: z.string(),
-            tanggal: z.string(),
-            siswa_id: z.string(),
-            status: z.enum(["Hadir", "Izin", "Sakit", "Alpa"]),
-          }),
-        },
-      },
-      required: true,
-    },
-  },
-  responses: {
-    200: {
-      description: "Student status updated in PostgreSQL",
-      content: {
-        "application/json": {
-          schema: z.object({
-            success: z.boolean(),
-            message: z.string(),
-          }),
-        },
-      },
-    },
-  },
-});
 
-guruRouter.openapi(updateGuruAbsensiStatusRoute, async (c) => {
-  const { kelas, mapel, tanggal, siswa_id, status } = c.req.valid("json");
-  const normKelas = (kelas || "X RPL 1").trim();
-  const normMapel = (mapel || "Pemrograman Web").trim();
-  const normTanggal = normalizeDateString(tanggal);
-
-  await getOrSeedSubjectSession(normKelas, normMapel, normTanggal);
-
-  await db
-    .update(subject_attendance_records)
-    .set({ status, updated_at: new Date() })
-    .where(
-      and(
-        eq(subject_attendance_records.kelas, normKelas),
-        eq(subject_attendance_records.mata_pelajaran, normMapel),
-        eq(subject_attendance_records.tanggal, normTanggal),
-        eq(subject_attendance_records.record_key, siswa_id)
-      )
-    );
-
-  return c.json(
-    {
-      success: true,
-      message: `Status siswa berhasil diubah menjadi ${status}`,
-    },
-    200
-  );
-});
 
 /**
  * 9. DELETE /api/v1/guru/absensi/:id
