@@ -2,6 +2,7 @@ import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { asc, eq } from "drizzle-orm";
 import { db } from "../../config/database";
 import { classes } from "../../config/schema";
+import { classes, students, teachers } from "../../config/schema";
 import { API_TAGS } from "../../shared/constants";
 import { ErrorResponseSchema } from "../../shared/types/api";
 
@@ -39,6 +40,28 @@ function mapClassRow(row: typeof classes.$inferSelect, fallbackIdx = 1) {
     wali_kelas: row.wali_kelas || "",
     tahun_ajaran: row.tahun_ajaran || "2026/2027",
   };
+}
+
+async function findClassByCodeOrIndex(id: number) {
+  // 1. Try finding by class_code_id directly
+  const [found] = await db
+    .select()
+    .from(classes)
+    .where(eq(classes.class_code_id, id))
+    .limit(1);
+  if (found) return found;
+
+  // 2. Fallback: match by row order or assign missing class_code_id
+  const all = await db.select().from(classes).orderBy(asc(classes.created_at));
+  const fallback = all[id - 1] || all.find((c, idx) => (c.class_code_id ?? idx + 1) === id);
+  if (fallback) {
+    if (fallback.class_code_id === null || fallback.class_code_id === undefined) {
+      await db.update(classes).set({ class_code_id: id }).where(eq(classes.id, fallback.id));
+      fallback.class_code_id = id;
+    }
+    return fallback;
+  }
+  return undefined;
 }
 
 /**
@@ -164,11 +187,7 @@ export const getKelasByIdRoute = createRoute({
 
 kelasRouter.openapi(getKelasByIdRoute, async (c) => {
   const { id } = c.req.valid("param");
-  const [item] = await db
-    .select()
-    .from(classes)
-    .where(eq(classes.class_code_id, id))
-    .limit(1);
+  const item = await findClassByCodeOrIndex(id);
 
   if (!item) {
     return c.json({ success: false, message: `Kelas dengan ID ${id} tidak ditemukan` }, 404);
@@ -220,20 +239,20 @@ export const updateKelasRoute = createRoute({
 kelasRouter.openapi(updateKelasRoute, async (c) => {
   const { id } = c.req.valid("param");
   const body = c.req.valid("json");
-  const [existing] = await db
-    .select()
-    .from(classes)
-    .where(eq(classes.class_code_id, id))
-    .limit(1);
+  const existing = await findClassByCodeOrIndex(id);
 
   if (!existing) {
     return c.json({ success: false, message: `Kelas dengan ID ${id} tidak ditemukan` }, 404);
   }
 
+  const newName = body.nama_kelas?.trim();
+  const oldName = existing.name;
+
   const [updated] = await db
     .update(classes)
     .set({
       name: body.nama_kelas ?? existing.name,
+      name: newName ?? existing.name,
       tingkat: body.tingkat ?? existing.tingkat,
       jurusan: body.jurusan ?? existing.jurusan,
       wali_kelas: body.wali_kelas ?? existing.wali_kelas,
@@ -242,6 +261,21 @@ kelasRouter.openapi(updateKelasRoute, async (c) => {
     })
     .where(eq(classes.id, existing.id))
     .returning();
+
+  // Cascade nama kelas baru ke tabel teachers dan students
+  if (newName && newName !== oldName) {
+    await db.update(teachers).set({ kelas_walas: newName }).where(eq(teachers.kelas_walas, oldName));
+    await db.update(students).set({ kelas: newName }).where(eq(students.kelas, oldName));
+  }
+
+  // Sinkronkan guru yang dipilih sebagai wali kelas
+  const walasName = body.wali_kelas?.trim();
+  if (walasName) {
+    await db
+      .update(teachers)
+      .set({ is_walas: true, kelas_walas: newName ?? existing.name })
+      .where(eq(teachers.nama_guru, walasName));
+  }
 
   return c.json(mapClassRow(updated!, id), 200);
 });
@@ -284,11 +318,7 @@ export const deleteKelasRoute = createRoute({
 
 kelasRouter.openapi(deleteKelasRoute, async (c) => {
   const { id } = c.req.valid("param");
-  const [existing] = await db
-    .select()
-    .from(classes)
-    .where(eq(classes.class_code_id, id))
-    .limit(1);
+  const existing = await findClassByCodeOrIndex(id);
 
   if (!existing) {
     return c.json({ success: false, message: `Kelas dengan ID ${id} tidak ditemukan` }, 404);

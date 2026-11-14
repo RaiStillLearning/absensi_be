@@ -17,8 +17,8 @@ describe("Integrasi Siswa & Autentikasi NISN — SMK Ghama Caraka", () => {
     const content = readFileSync(csvPath, "utf-8");
     const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
 
-    // 1 baris header + 41 baris siswa = 42 baris
-    expect(lines.length).toBe(42);
+    // 1 baris header + 21 baris siswa Kelas 11 = 22 baris
+    expect(lines.length).toBe(22);
     expect(lines[0]).toBe("No,NISN,Nama Siswa,Kelas");
 
     // Periksa salah satu siswa dengan leading zero
@@ -30,17 +30,17 @@ describe("Integrasi Siswa & Autentikasi NISN — SMK Ghama Caraka", () => {
     // Jalankan import
     const summary = await importStudentsFromCsv(csvPath);
 
-    expect(summary.total_read).toBe(41);
+    expect(summary.total_read).toBe(21);
     expect(summary.failed_count).toBe(0);
     expect(summary.errors.length).toBe(0);
 
     // Jalankan import kedua kalinya untuk memastikan idempotency
     const secondSummary = await importStudentsFromCsv(csvPath);
-    expect(secondSummary.total_read).toBe(41);
+    expect(secondSummary.total_read).toBe(21);
     expect(secondSummary.students_inserted).toBe(0);
-    expect(secondSummary.students_existing).toBe(41);
+    expect(secondSummary.students_existing).toBe(21);
     expect(secondSummary.users_created).toBe(0);
-    expect(secondSummary.users_existing).toBe(41);
+    expect(secondSummary.users_existing).toBe(21);
   });
 
   it("3. Tidak boleh ada duplikasi NISN di tabel students", async () => {
@@ -76,15 +76,16 @@ describe("Integrasi Siswa & Autentikasi NISN — SMK Ghama Caraka", () => {
 
     expect(enrollment).toBeDefined();
     expect(enrollment?.class_name).toBe("KELAS 11");
+    expect(enrollment?.class_name).toBeDefined();
 
-    // Cek siswa kelas 12 dengan leading zero
-    const student12 = (
-      await db.select().from(students).where(eq(students.nisn, "0086836167")).limit(1)
+    // Cek siswa kelas 11 dengan gender P dan leading zero
+    const studentFemale = (
+      await db.select().from(students).where(eq(students.nisn, "0096147878")).limit(1)
     )[0];
 
-    expect(student12).toBeDefined();
-    expect(student12?.full_name).toBe("Apriliana Isnaini Hasan");
-    expect(student12?.gender).toBe("P");
+    expect(studentFemale).toBeDefined();
+    expect(studentFemale?.full_name).toBe("Aisya Aqilatu Tsabita");
+    expect(studentFemale?.gender).toBe("P");
   });
 
   it("5. Endpoint POST /api/v1/auth/login berhasil mengautentikasi siswa via NISN", async () => {
@@ -114,6 +115,7 @@ describe("Integrasi Siswa & Autentikasi NISN — SMK Ghama Caraka", () => {
     expect(body.data.user.student.nisn).toBe(testNisn);
     expect(body.data.user.student.full_name).toBe("Abdul Hafizh Rijki Tsaqafi");
     expect(body.data.user.student.class_name).toBe("KELAS 11");
+    expect(body.data.user.student.class_name).toBeDefined();
     expect(body.data.user.password_hash).toBeUndefined();
     expect(body.data.user.password).toBeUndefined();
   });

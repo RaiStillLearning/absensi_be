@@ -281,6 +281,7 @@ export async function importStudentsFromCsv(
             nisn,
             full_name: fullName,
             gender,
+            kelas: targetClass.name,
             status: "active",
           })
           .returning();

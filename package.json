@@ -21,6 +21,7 @@
     "db:seed": "tsx src/scripts/seed_database.ts",
     "db:seed:scanner": "tsx src/scripts/seed_dummy_student.ts",
     "db:import:students": "tsx src/scripts/import_students_csv.ts",
+    "db:purge:dummy": "tsx src/scripts/purge_dummy_data.ts",
     "db:studio": "drizzle-kit studio",
     "docs:generate": "tsx src/scripts/generate-openapi.ts"
   },

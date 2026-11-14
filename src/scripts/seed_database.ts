@@ -1,4 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { closeDatabaseConnection, db, ensureDatabaseInitialized } from "../config/database";
 import { env } from "../config/env";
@@ -13,6 +15,7 @@ import {
 } from "../config/schema";
 import { hashPassword } from "../shared/utils/hash";
 import { initialSiswaPerKelas, initialSiswaProfile } from "../shared/data/initial_data";
+import { importStudentsFromCsv } from "./import_students_csv";
 
 export async function seedAll() {
   console.log("🌱 Memulai seeding data PostgreSQL...");
@@ -74,7 +77,15 @@ export async function seedAll() {
   }
 
   // 3. Seed Students & Barcodes
-  // Add main profile student
+  const csvPath = join(process.cwd(), "data", "students.csv");
+  if (existsSync(csvPath)) {
+    console.log("📄 Menemukan data/students.csv — mengimpor data siswa riil dari CSV...");
+    await importStudentsFromCsv(csvPath);
+    console.log("✅ Data siswa riil dari CSV berhasil di-import.");
+    return;
+  }
+
+  // Fallback: Add main profile student
   const allStudents = [
     {
       nisn: initialSiswaProfile.nisn,

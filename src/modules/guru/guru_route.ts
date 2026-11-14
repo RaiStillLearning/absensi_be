@@ -5,6 +5,7 @@ import { db } from "../../config/database";
 import { env } from "../../config/env";
 import {
   activity_logs,
+  classes,
   schedules,
   students,
   subject_attendance_records,
@@ -311,6 +312,31 @@ export const listGuruRoute = createRoute({
 guruRouter.openapi(listGuruRoute, async (c) => {
   const rows = await db.select().from(teachers).orderBy(asc(teachers.id));
   return c.json(rows.map(mapTeacherToGuruItem), 200);
+  const [rows, allClasses] = await Promise.all([
+    db.select().from(teachers).orderBy(asc(teachers.id)),
+    db.select().from(classes),
+  ]);
+
+  const walasClassMap = new Map<string, string>();
+  for (const cls of allClasses) {
+    if (cls.wali_kelas) {
+      walasClassMap.set(cls.wali_kelas.toLowerCase(), cls.name);
+    }
+  }
+
+  const result = rows.map((t) => {
+    const item = mapTeacherToGuruItem(t);
+    const assignedClass = walasClassMap.get(t.nama_guru.toLowerCase());
+    if (assignedClass) {
+      item.is_walas = true;
+      item.isWalas = true;
+      item.kelas_walas = assignedClass;
+      item.kelasWalas = assignedClass;
+    }
+    return item;
+  });
+
+  return c.json(result, 200);
 });
 
 /**
@@ -382,6 +408,13 @@ guruRouter.openapi(createGuruRoute, async (c) => {
         is_active: true,
       })
       .onConflictDoNothing();
+  }
+
+  if (isWalas && kelasWalas) {
+    await db
+      .update(classes)
+      .set({ wali_kelas: body.nama_guru })
+      .where(eq(classes.name, kelasWalas));
   }
 
   return c.json(mapTeacherToGuruItem(inserted!), 201);
@@ -1130,6 +1163,13 @@ guruRouter.openapi(updateGuruRoute, async (c) => {
     })
     .where(eq(teachers.id, id))
     .returning();
+
+  if (isWalas && kelasWalas) {
+    await db
+      .update(classes)
+      .set({ wali_kelas: updated!.nama_guru })
+      .where(eq(classes.name, kelasWalas));
+  }
 
   return c.json(mapTeacherToGuruItem(updated!), 200);
 });
